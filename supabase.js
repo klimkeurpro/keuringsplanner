@@ -2,21 +2,21 @@
 // KeuringsPlanner - Supabase Data Layer
 // ============================================
 
-let supabase;
+let db;
 
 function initSupabase() {
   if (!window.supabase) {
     console.error('Supabase library niet geladen!');
     return false;
   }
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   return true;
 }
 
 // ─── KLUSSEN ───
 
 async function fetchKlussen(inclusiefArchief = false) {
-  let query = supabase.from('klussen').select('*').order('created_at', { ascending: false });
+  let query = db.from('klussen').select('*').order('created_at', { ascending: false });
   if (!inclusiefArchief) query = query.eq('gearchiveerd', false);
   const { data, error } = await query;
   if (error) { console.error('Fout bij ophalen klussen:', error); return []; }
@@ -24,7 +24,7 @@ async function fetchKlussen(inclusiefArchief = false) {
 }
 
 async function fetchArchief(zoekterm = '') {
-  let query = supabase.from('klussen').select('*').eq('gearchiveerd', true).order('updated_at', { ascending: false });
+  let query = db.from('klussen').select('*').eq('gearchiveerd', true).order('updated_at', { ascending: false });
   const { data, error } = await query;
   if (error) { console.error('Fout bij ophalen archief:', error); return []; }
   let results = data.map(mapKlusFromDB);
@@ -42,31 +42,31 @@ async function fetchArchief(zoekterm = '') {
 async function saveKlus(klus) {
   const dbData = mapKlusToDB(klus);
   if (klus.id) {
-    const { data, error } = await supabase.from('klussen').update(dbData).eq('id', klus.id).select().single();
+    const { data, error } = await db.from('klussen').update(dbData).eq('id', klus.id).select().single();
     if (error) { console.error('Fout bij opslaan klus:', error); return null; }
     return mapKlusFromDB(data);
   } else {
     delete dbData.id;
-    const { data, error } = await supabase.from('klussen').insert(dbData).select().single();
+    const { data, error } = await db.from('klussen').insert(dbData).select().single();
     if (error) { console.error('Fout bij aanmaken klus:', error); return null; }
     return mapKlusFromDB(data);
   }
 }
 
 async function deleteKlus(id) {
-  const { error } = await supabase.from('klussen').delete().eq('id', id);
+  const { error } = await db.from('klussen').delete().eq('id', id);
   if (error) console.error('Fout bij verwijderen klus:', error);
   return !error;
 }
 
 async function archiveerKlus(id) {
-  const { error } = await supabase.from('klussen').update({ gearchiveerd: true }).eq('id', id);
+  const { error } = await db.from('klussen').update({ gearchiveerd: true }).eq('id', id);
   if (error) console.error('Fout bij archiveren klus:', error);
   return !error;
 }
 
 async function deArchiveerKlus(id) {
-  const { error } = await supabase.from('klussen').update({ gearchiveerd: false, status: 'intake' }).eq('id', id);
+  const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'intake' }).eq('id', id);
   if (error) console.error('Fout bij de-archiveren klus:', error);
   return !error;
 }
@@ -133,21 +133,21 @@ function mapKlusToDB(klus) {
 // ─── TODOS ───
 
 async function fetchTodos() {
-  const { data, error } = await supabase.from('todos').select('*').order('created_at', { ascending: false });
+  const { data, error } = await db.from('todos').select('*').order('created_at', { ascending: false });
   if (error) { console.error('Fout bij ophalen todos:', error); return []; }
   return data;
 }
 
 async function saveTodo(todo) {
   if (todo.id && typeof todo.id === 'number') {
-    const { data, error } = await supabase.from('todos').update({
+    const { data, error } = await db.from('todos').update({
       tekst: todo.tekst, ruimte: todo.ruimte, persoon: todo.persoon,
       prioriteit: todo.prioriteit, klaar: todo.klaar,
     }).eq('id', todo.id).select().single();
     if (error) { console.error('Fout bij opslaan todo:', error); return null; }
     return data;
   } else {
-    const { data, error } = await supabase.from('todos').insert({
+    const { data, error } = await db.from('todos').insert({
       tekst: todo.tekst, ruimte: todo.ruimte || '', persoon: todo.persoon || '',
       prioriteit: todo.prioriteit || 'normaal', klaar: false, datum: todo.datum || new Date().toISOString().split('T')[0],
     }).select().single();
@@ -157,7 +157,7 @@ async function saveTodo(todo) {
 }
 
 async function deleteTodo(id) {
-  const { error } = await supabase.from('todos').delete().eq('id', id);
+  const { error } = await db.from('todos').delete().eq('id', id);
   if (error) console.error('Fout bij verwijderen todo:', error);
   return !error;
 }
@@ -165,7 +165,7 @@ async function deleteTodo(id) {
 // ─── INSTELLINGEN ───
 
 async function fetchInstellingen() {
-  const { data, error } = await supabase.from('instellingen').select('*').eq('id', 'global').single();
+  const { data, error } = await db.from('instellingen').select('*').eq('id', 'global').single();
   if (error) { console.error('Fout bij ophalen instellingen:', error); return null; }
   return {
     template: data.week_template,
@@ -177,7 +177,7 @@ async function fetchInstellingen() {
 }
 
 async function saveInstellingen(inst) {
-  const { error } = await supabase.from('instellingen').update({
+  const { error } = await db.from('instellingen').update({
     week_template: inst.template,
     set_types: inst.setTypes,
     ruimtes: inst.ruimtes,
@@ -194,12 +194,12 @@ async function uploadFoto(klusId, file) {
   const ext = file.name.split('.').pop();
   const path = `klus_${klusId}/${Date.now()}.${ext}`;
 
-  const { error: uploadError } = await supabase.storage.from('fotos').upload(path, file);
+  const { error: uploadError } = await db.storage.from('fotos').upload(path, file);
   if (uploadError) { console.error('Fout bij uploaden foto:', uploadError); return null; }
 
-  const { data: urlData } = supabase.storage.from('fotos').getPublicUrl(path);
+  const { data: urlData } = db.storage.from('fotos').getPublicUrl(path);
 
-  const { data, error } = await supabase.from('fotos').insert({
+  const { data, error } = await db.from('fotos').insert({
     klus_id: klusId, bestandsnaam: file.name, storage_path: path, notitie: '',
   }).select().single();
   if (error) { console.error('Fout bij opslaan foto record:', error); return null; }
@@ -208,17 +208,17 @@ async function uploadFoto(klusId, file) {
 }
 
 async function fetchFotos(klusId) {
-  const { data, error } = await supabase.from('fotos').select('*').eq('klus_id', klusId).order('created_at', { ascending: true });
+  const { data, error } = await db.from('fotos').select('*').eq('klus_id', klusId).order('created_at', { ascending: true });
   if (error) { console.error('Fout bij ophalen fotos:', error); return []; }
   return data.map(f => {
-    const { data: urlData } = supabase.storage.from('fotos').getPublicUrl(f.storage_path);
+    const { data: urlData } = db.storage.from('fotos').getPublicUrl(f.storage_path);
     return { ...f, url: urlData.publicUrl };
   });
 }
 
 async function deleteFoto(foto) {
-  await supabase.storage.from('fotos').remove([foto.storage_path]);
-  const { error } = await supabase.from('fotos').delete().eq('id', foto.id);
+  await db.storage.from('fotos').remove([foto.storage_path]);
+  const { error } = await db.from('fotos').delete().eq('id', foto.id);
   if (error) console.error('Fout bij verwijderen foto:', error);
   return !error;
 }
@@ -226,15 +226,15 @@ async function deleteFoto(foto) {
 // ─── REALTIME SUBSCRIPTIONS ───
 
 function subscribeToChanges(onKlussenChange, onTodosChange, onInstellingenChange) {
-  supabase.channel('klussen-changes')
+  db.channel('klussen-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'klussen' }, () => { onKlussenChange(); })
     .subscribe();
 
-  supabase.channel('todos-changes')
+  db.channel('todos-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => { onTodosChange(); })
     .subscribe();
 
-  supabase.channel('instellingen-changes')
+  db.channel('instellingen-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'instellingen' }, () => { onInstellingenChange(); })
     .subscribe();
 }
