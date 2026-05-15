@@ -166,8 +166,8 @@ function renderStatsBar() {
   const warn = active.filter(j => !j.heeftAfspraak && workdaysBetween(j.datumBinnen || todayStr(), todayStr()) >= WARNING_DAYS).length;
 
   return `<div class="stats-bar">
-    <div class="stat-card"><div class="stat-val accent">${met}</div><div class="stat-label">Met afspraak</div></div>
-    <div class="stat-card"><div class="stat-val muted">${zonder}</div><div class="stat-label">Zonder afspraak</div></div>
+    <div class="stat-card"><div class="stat-val accent">${met}</div><div class="stat-label">Met afleverdatum</div></div>
+    <div class="stat-card"><div class="stat-val muted">${zonder}</div><div class="stat-label">Wachtlijst</div></div>
     <div class="stat-card"><div class="stat-val">${uren}u</div><div class="stat-label">Totaal uren</div></div>
     <div class="stat-card ${warn > 0 ? 'stat-warn' : ''}"><div class="stat-val ${warn > 0 ? 'danger' : ''}">${warn}</div><div class="stat-label">⚠ >${WARNING_DAYS} dagen</div></div>
   </div>`;
@@ -184,8 +184,8 @@ function renderCalendar() {
   for (let i = 0; i < allDays.length; i += 5) weeks.push(allDays.slice(i, i + 5));
 
   let html = `<div class="cal-legend">
-    <span class="legend-item"><span class="legend-dot accent-bg"></span> Met afspraak</span>
-    <span class="legend-item"><span class="legend-dot muted-bg"></span> Zonder afspraak</span>
+    <span class="legend-item"><span class="legend-dot accent-bg"></span> Met afleverdatum</span>
+    <span class="legend-item"><span class="legend-dot muted-bg"></span> Wachtlijst</span>
     <span class="legend-item"><span class="legend-dot free-bg"></span> Vrij</span>
     <span class="legend-sep">|</span>
     <span class="legend-hint">Klik op dag = capaciteit aanpassen</span>
@@ -275,7 +275,7 @@ function renderKanban() {
             <div class="kanban-card-desc">${escHtml(job.omschrijving)}</div>
           </div>
           <span class="kanban-badge ${job.heeftAfspraak ? 'badge-afspraak' : 'badge-tussendoor'}">
-            ${job.heeftAfspraak ? `📅 ${formatDateShort(job.afspraakDatum)}` : 'Tussendoor'}
+            ${job.heeftAfspraak ? `📅 Aflevering ${formatDateShort(job.afspraakDatum)}` : 'Wachtlijst'}
           </span>
         </div>
         <div class="kanban-card-meta">
@@ -566,8 +566,6 @@ function syncFormToModal() {
   if (el('jf-tel')) form.telefoon = el('jf-tel').value;
   if (el('jf-omschr')) form.omschrijving = el('jf-omschr').value;
   if (el('jf-uren')) form.geschatteUren = parseFloat(el('jf-uren').value) || 0;
-  if (el('jf-afspr-datum')) form.afspraakDatum = el('jf-afspr-datum').value;
-  if (el('jf-afspr-tijd')) form.afspraakTijd = el('jf-afspr-tijd').value;
   if (el('jf-binn-wijze')) form.binnenkomstWijze = el('jf-binn-wijze').value;
   if (el('jf-binn-datum')) form.binnenkomstDatum = el('jf-binn-datum').value;
   if (el('jf-binn-tijd')) form.binnenkomstTijd = el('jf-binn-tijd').value;
@@ -577,6 +575,10 @@ function syncFormToModal() {
   if (el('jf-afkeur-toel')) form.afkeurToelichting = el('jf-afkeur-toel').value;
   if (el('jf-status')) form.status = el('jf-status').value;
   if (el('jf-notities')) form.notities = el('jf-notities').value;
+  // Derive afspraak from retourDatum
+  form.heeftAfspraak = !!(form.retourDatum);
+  form.afspraakDatum = form.retourDatum || '';
+  form.afspraakTijd = form.retourTijd || '';
   document.querySelectorAll('.set-type-input').forEach(inp => {
     form.aantallen[inp.dataset.typeId] = parseInt(inp.value) || 0;
   });
@@ -644,20 +646,8 @@ function renderJobModalContent() {
         <input class="input" id="jf-afkeur-toel" value="${escHtml(form.afkeurToelichting)}" placeholder="Aanvullende afspraken bij afkeur..." />
       </div>
 
-      <div class="form-section section-toggle ${form.heeftAfspraak ? 'section-active' : ''}">
-        <div class="toggle-row" onclick="window._modalForm.heeftAfspraak = !window._modalForm.heeftAfspraak; renderJobModalContent();">
-          <div class="toggle-switch ${form.heeftAfspraak ? 'on' : ''}"><div class="toggle-dot"></div></div>
-          <span class="toggle-label">${form.heeftAfspraak ? 'Met afspraak — deadline, heeft voorrang' : 'Zonder afspraak — tussendoor'}</span>
-        </div>
-        ${form.heeftAfspraak ? `
-          <div class="form-grid-2" style="margin-top:10px">
-            <div class="field"><label>Deadline datum</label><input type="date" class="input" id="jf-afspr-datum" value="${form.afspraakDatum}" /></div>
-            <div class="field"><label>Deadline tijd</label><input type="time" class="input" id="jf-afspr-tijd" value="${form.afspraakTijd}" /></div>
-          </div>` : ''}
-      </div>
-
       <div class="form-section">
-        <div class="section-title">🔄 Binnenkomst & Retour</div>
+        <div class="section-title">🔄 Binnenkomst & Aflevering</div>
         <div class="form-grid-2">
           <div>
             <div class="sub-label">BINNENKOMST</div>
@@ -668,12 +658,13 @@ function renderJobModalContent() {
             </div>
           </div>
           <div>
-            <div class="sub-label">RETOUR KLANT</div>
-            <input class="input mb-4" id="jf-ret-wijze" value="${escHtml(form.retourWijze)}" placeholder="Klant haalt op, post..." />
+            <div class="sub-label">AFLEVERING KLANT</div>
+            <input class="input mb-4" id="jf-ret-wijze" value="${escHtml(form.retourWijze)}" placeholder="Klant haalt op, post, wij brengen..." />
             <div class="form-grid-2">
               <input type="date" class="input" id="jf-ret-datum" value="${form.retourDatum}" />
               <input type="time" class="input" id="jf-ret-tijd" value="${form.retourTijd}" />
             </div>
+            <div class="deadline-hint">${form.retourDatum ? '📅 Afleverdatum ingevuld → wordt ingepland met voorrang' : '💡 Vul een datum in als er een afspraak is — dan krijgt deze klus voorrang'}</div>
           </div>
         </div>
       </div>
@@ -823,8 +814,9 @@ function collectFormData() {
     telefoon: form.telefoon,
     omschrijving: form.omschrijving,
     geschatteUren: form.geschatteUren || 1,
-    afspraakDatum: form.afspraakDatum || '',
-    afspraakTijd: form.afspraakTijd || '',
+    heeftAfspraak: !!(form.retourDatum),
+    afspraakDatum: form.retourDatum || '',
+    afspraakTijd: form.retourTijd || '',
     binnenkomstWijze: form.binnenkomstWijze || '',
     binnenkomstDatum: form.binnenkomstDatum || '',
     binnenkomstTijd: form.binnenkomstTijd || '',
