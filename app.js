@@ -223,8 +223,8 @@ function renderCalendar() {
         </div>
         <div class="capacity-bar"><div class="cap-afspraak" style="width:${aPercent}%"></div><div class="cap-tussendoor" style="width:${tPercent}%"></div></div>
         <div class="cal-day-info ${isOver ? 'danger' : ''}">
-          <span>${entry.usedHours}/${entry.capacity}u</span>
-          ${freeH > 0 && !isOver ? `<span class="free">${freeH}u vrij</span>` : ''}
+          <span>${Math.round(entry.usedHours * 100) / 100}/${entry.capacity}u</span>
+          ${freeH > 0 && !isOver ? `<span class="free">${Math.round(freeH * 100) / 100}u vrij</span>` : ''}
           ${isOver ? '<span class="over">OVER</span>' : ''}
         </div>
         <div class="cal-day-items">
@@ -246,7 +246,7 @@ function renderCalPill(item) {
   const cls = overflow ? 'pill-overflow' : type === 'afspraak' ? 'pill-afspraak' : isWarning ? 'pill-warning' : 'pill-tussendoor';
   return `<div class="cal-pill ${cls}" onclick="event.stopPropagation(); openJobModal(${job.id})">
     <span class="pill-name">${(isWarning || overflow) ? '⚠ ' : ''}${escHtml(job.klant)}</span>
-    <span class="pill-hours">${hours}u</span>
+    <span class="pill-hours">${Math.round(hours * 100) / 100}u</span>
   </div>`;
 }
 
@@ -330,8 +330,8 @@ function renderTodo() {
 
   open.forEach(todo => {
     html += `<div class="todo-item" style="--pri-color: ${priColors[todo.prioriteit] || priColors.normaal}">
-      <button class="todo-check" onclick="toggleTodo(${todo.id}, true)"></button>
-      <div class="todo-info">
+      <button class="todo-check" onclick="event.stopPropagation(); toggleTodo(${todo.id}, true)"></button>
+      <div class="todo-info" onclick="openEditTodoModal(${todo.id})" style="cursor:pointer">
         <div class="todo-text">${escHtml(todo.tekst)}</div>
         <div class="todo-meta">
           ${todo.ruimte ? `<span>📍${escHtml(todo.ruimte)}</span>` : ''}
@@ -339,7 +339,7 @@ function renderTodo() {
           <span>${formatDateShort(todo.datum)}</span>
         </div>
       </div>
-      <button class="btn-icon" onclick="doDeleteTodo(${todo.id})">✕</button>
+      <button class="btn-icon" onclick="event.stopPropagation(); doDeleteTodo(${todo.id})">✕</button>
     </div>`;
   });
 
@@ -557,7 +557,35 @@ function openJobModal(id, isArchief = false) {
   renderJobModalContent();
 }
 
+function syncFormToModal() {
+  const form = window._modalForm;
+  if (!form) return;
+  const el = (id) => document.getElementById(id);
+  if (el('jf-klant')) form.klant = el('jf-klant').value;
+  if (el('jf-klantnr')) form.klantNummer = el('jf-klantnr').value;
+  if (el('jf-tel')) form.telefoon = el('jf-tel').value;
+  if (el('jf-omschr')) form.omschrijving = el('jf-omschr').value;
+  if (el('jf-uren')) form.geschatteUren = parseFloat(el('jf-uren').value) || 0;
+  if (el('jf-afspr-datum')) form.afspraakDatum = el('jf-afspr-datum').value;
+  if (el('jf-afspr-tijd')) form.afspraakTijd = el('jf-afspr-tijd').value;
+  if (el('jf-binn-wijze')) form.binnenkomstWijze = el('jf-binn-wijze').value;
+  if (el('jf-binn-datum')) form.binnenkomstDatum = el('jf-binn-datum').value;
+  if (el('jf-binn-tijd')) form.binnenkomstTijd = el('jf-binn-tijd').value;
+  if (el('jf-ret-wijze')) form.retourWijze = el('jf-ret-wijze').value;
+  if (el('jf-ret-datum')) form.retourDatum = el('jf-ret-datum').value;
+  if (el('jf-ret-tijd')) form.retourTijd = el('jf-ret-tijd').value;
+  if (el('jf-afkeur-toel')) form.afkeurToelichting = el('jf-afkeur-toel').value;
+  if (el('jf-status')) form.status = el('jf-status').value;
+  if (el('jf-notities')) form.notities = el('jf-notities').value;
+  document.querySelectorAll('.set-type-input').forEach(inp => {
+    form.aantallen[inp.dataset.typeId] = parseInt(inp.value) || 0;
+  });
+}
+
 function renderJobModalContent() {
+  // Save current form values before re-rendering
+  syncFormToModal();
+
   const form = window._modalForm;
   const isNew = window._modalIsNew;
   const isArchief = window._modalIsArchief;
@@ -786,26 +814,29 @@ async function doDeleteFoto(fotoId, storagePath, klusId) {
 }
 
 function collectFormData() {
+  syncFormToModal();
   const form = window._modalForm;
   return {
     ...form,
-    klant: document.getElementById('jf-klant')?.value || form.klant,
-    klantNummer: document.getElementById('jf-klantnr')?.value || '',
-    telefoon: document.getElementById('jf-tel')?.value || '',
-    omschrijving: document.getElementById('jf-omschr')?.value || '',
-    geschatteUren: parseFloat(document.getElementById('jf-uren')?.value) || form.geschatteUren || 1,
-    afspraakDatum: document.getElementById('jf-afspr-datum')?.value || form.afspraakDatum || '',
-    afspraakTijd: document.getElementById('jf-afspr-tijd')?.value || form.afspraakTijd || '',
-    binnenkomstWijze: document.getElementById('jf-binn-wijze')?.value || '',
-    binnenkomstDatum: document.getElementById('jf-binn-datum')?.value || '',
-    binnenkomstTijd: document.getElementById('jf-binn-tijd')?.value || '',
-    retourWijze: document.getElementById('jf-ret-wijze')?.value || '',
-    retourDatum: document.getElementById('jf-ret-datum')?.value || '',
-    retourTijd: document.getElementById('jf-ret-tijd')?.value || '',
-    afkeurToelichting: document.getElementById('jf-afkeur-toel')?.value || '',
-    status: document.getElementById('jf-status')?.value || form.status,
-    notities: document.getElementById('jf-notities')?.value || '',
-    datumBinnen: document.getElementById('jf-binn-datum')?.value || form.datumBinnen || todayStr(),
+    klant: form.klant,
+    klantNummer: form.klantNummer,
+    telefoon: form.telefoon,
+    omschrijving: form.omschrijving,
+    geschatteUren: form.geschatteUren || 1,
+    afspraakDatum: form.afspraakDatum || '',
+    afspraakTijd: form.afspraakTijd || '',
+    binnenkomstWijze: form.binnenkomstWijze || '',
+    binnenkomstDatum: form.binnenkomstDatum || '',
+    binnenkomstTijd: form.binnenkomstTijd || '',
+    retourWijze: form.retourWijze || '',
+    retourDatum: form.retourDatum || '',
+    retourTijd: form.retourTijd || '',
+    afkeurBeleid: form.afkeurBeleid || '',
+    afkeurToelichting: form.afkeurToelichting || '',
+    contactLog: form.contactLog || [],
+    status: form.status || 'intake',
+    notities: form.notities || '',
+    datumBinnen: form.binnenkomstDatum || form.datumBinnen || todayStr(),
   };
 }
 
@@ -827,24 +858,27 @@ async function submitJobForm() {
 }
 
 // ─── Todo Modal ───
-function openTodoModal() {
+function openTodoModal(existingTodo = null) {
+  const isEdit = !!existingTodo;
   const html = `
     <div class="modal-header">
-      <h2>✅ Nieuwe taak</h2>
+      <h2>${isEdit ? '✏️ Taak bewerken' : '✅ Nieuwe taak'}</h2>
       <button class="btn-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field"><label>Wat moet er gebeuren? *</label><input class="input" id="td-tekst" placeholder="Bijv. stelling nummeren in magazijn" /></div>
+      <div class="field"><label>Wat moet er gebeuren? *</label><input class="input" id="td-tekst" value="${escHtml(existingTodo?.tekst || '')}" placeholder="Bijv. stelling nummeren in magazijn" /></div>
       <div class="form-grid-3" style="margin-top:10px">
         <div class="field"><label>Ruimte</label>
-          <select class="input" id="td-ruimte">${state.settings.ruimtes.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('')}</select>
+          <select class="input" id="td-ruimte">
+            ${state.settings.ruimtes.map(r => `<option value="${escHtml(r)}" ${existingTodo?.ruimte === r ? 'selected' : ''}>${escHtml(r)}</option>`).join('')}
+          </select>
           <div class="inline-add">
             <input class="input input-sm" id="td-new-room" placeholder="Nieuwe ruimte..." />
             <button class="btn-step" onclick="addTodoRoom()">+</button>
           </div>
         </div>
         <div class="field"><label>Voor wie</label>
-          <input class="input" id="td-persoon" placeholder="Naam" list="td-personen-dl" />
+          <input class="input" id="td-persoon" value="${escHtml(existingTodo?.persoon || '')}" placeholder="Naam (of meerdere, komma-gescheiden)" list="td-personen-dl" />
           <datalist id="td-personen-dl">${state.settings.personen.map(p => `<option value="${escHtml(p)}">`).join('')}</datalist>
           <div class="inline-add">
             <input class="input input-sm" id="td-new-person" placeholder="Nieuwe persoon..." />
@@ -853,16 +887,25 @@ function openTodoModal() {
         </div>
         <div class="field"><label>Prioriteit</label>
           <select class="input" id="td-prio">
-            <option value="hoog">🔴 Hoog</option><option value="normaal" selected>🟡 Normaal</option><option value="laag">⚪ Laag</option>
+            <option value="hoog" ${existingTodo?.prioriteit === 'hoog' ? 'selected' : ''}>🔴 Hoog</option>
+            <option value="normaal" ${!existingTodo || existingTodo?.prioriteit === 'normaal' ? 'selected' : ''}>🟡 Normaal</option>
+            <option value="laag" ${existingTodo?.prioriteit === 'laag' ? 'selected' : ''}>⚪ Laag</option>
           </select>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-primary" onclick="submitTodo()">✓ Toevoegen</button>
+      <button class="btn-primary" onclick="submitTodo(${isEdit ? existingTodo.id : 'null'})">${isEdit ? '✓ Opslaan' : '✓ Toevoegen'}</button>
+      ${isEdit ? `<button class="btn-sm btn-delete" onclick="doDeleteTodo(${existingTodo.id}); closeModal();">🗑 Verwijderen</button>` : ''}
     </div>`;
   openModal(html);
   setTimeout(() => document.getElementById('td-tekst')?.focus(), 100);
+}
+
+function openEditTodoModal(id) {
+  const todo = state.todos.find(t => t.id === id);
+  if (!todo) return;
+  openTodoModal(todo);
 }
 
 async function addTodoRoom() {
@@ -890,7 +933,7 @@ async function addTodoPerson() {
   showToast(`${person} toegevoegd`);
 }
 
-async function submitTodo() {
+async function submitTodo(editId = null) {
   const tekst = document.getElementById('td-tekst')?.value?.trim();
   if (!tekst) { showToast('Vul in wat er moet gebeuren!', 'error'); return; }
   const todo = {
@@ -899,8 +942,16 @@ async function submitTodo() {
     prioriteit: document.getElementById('td-prio')?.value || 'normaal',
     datum: todayStr(),
   };
-  const saved = await saveTodo(todo);
-  if (saved) { state.todos.unshift(saved); closeModal(); render(); showToast('Taak toegevoegd ✓'); }
+  if (editId) {
+    todo.id = editId;
+    const existing = state.todos.find(t => t.id === editId);
+    if (existing) todo.klaar = existing.klaar;
+    const saved = await saveTodo(todo);
+    if (saved) { state.todos = state.todos.map(t => t.id === editId ? saved : t); closeModal(); render(); showToast('Taak bijgewerkt ✓'); }
+  } else {
+    const saved = await saveTodo(todo);
+    if (saved) { state.todos.unshift(saved); closeModal(); render(); showToast('Taak toegevoegd ✓'); }
+  }
 }
 
 // ─── Settings Modal ───
