@@ -419,7 +419,7 @@ function render() {
         </div>
         <div class="header-right">
           <button class="btn-header" onclick="openSettingsModal()">⚙️ Instellingen</button>
-          <button class="btn-primary" onclick="openJobModal(null)">+ Nieuwe klus</button>
+          <button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe klus</button>
         </div>
       </div>
     </header>
