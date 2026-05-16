@@ -459,26 +459,85 @@ function openDayOverride(dateStr) {
   var capOv = getCapOverrideForDay(dateStr);
   var cap = capacityForDay(dateStr);
   var html = '<div class="modal-header"><h2>📅 ' + formatDateFull(dateStr) + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
-    '<div class="modal-body"><div class="form-section"><div class="section-title">👥 Personeel deze dag</div>';
+    '<div class="modal-body"><div class="form-section"><div class="section-title">👥 Personeel deze dag</div>' +
+    '<div class="hint-text">Pas tijden aan voor deze dag. Wijzigingen gelden alleen voor deze datum.</div>';
   if (staff.length === 0) html += '<div class="empty-hint">Geen personeel geconfigureerd. Ga naar 👥 Personeel om medewerkers toe te voegen.</div>';
   else staff.forEach(function(s) {
     var absent = !s.aanwezig;
     var reden = absent ? getAfwezigheidReden(s.id, dateStr) : null;
-    html += '<div class="staff-day-row ' + (absent ? 'staff-absent' : '') + '">' +
+    var ov = getDagOverrideForPerson(s.id, dateStr);
+    var hasOverride = ov && (ov.start_override || ov.eind_override || ov.keuringsuren_override != null);
+    html += '<div class="staff-day-edit-row ' + (absent ? 'staff-absent' : '') + '">' +
+      '<div class="staff-day-edit-left">' +
       '<div class="staff-color-dot" style="background:' + s.kleur + '"></div>' +
       '<span class="staff-day-name">' + escHtml(s.naam) + (s.is_keurmeester ? ' 🔧' : '') + '</span>' +
-      (absent ? '<span class="staff-day-badge absent">' + (ABSENCE_LABELS[reden] || 'Afwezig') + '</span>' :
-        '<span class="staff-day-times">' + s.start + ' - ' + s.eind + '</span>' +
-        (s.is_keurmeester ? '<span class="staff-day-cap">' + s.keuringsuren + 'u keuring</span>' : '')) + '</div>';
+      (absent ? '<span class="staff-day-badge absent">' + (ABSENCE_LABELS[reden] || 'Afwezig') + '</span>' : '') +
+      (hasOverride ? '<span class="badge badge-override">aangepast</span>' : '') +
+      '</div>';
+    if (!absent) {
+      html += '<div class="staff-day-edit-fields">' +
+        '<input type="time" class="input-time" id="dov-start-' + s.id + '" value="' + s.start + '" />' +
+        '<span>—</span>' +
+        '<input type="time" class="input-time" id="dov-eind-' + s.id + '" value="' + s.eind + '" />';
+      if (s.is_keurmeester) html += '<input type="number" step="0.5" class="input-num" id="dov-keur-' + s.id + '" value="' + s.keuringsuren + '" /><span class="unit">keur.u</span>';
+      html += '<button class="btn-icon" title="Vrij deze dag" onclick="setDayPersonAbsent(\'' + dateStr + '\',' + s.id + ')">🚫</button>';
+      html += '</div>';
+    } else if (!reden) {
+      // Absent via dag_override (not via afwezigheden), show undo button
+      html += '<div class="staff-day-edit-fields"><button class="btn-sm" onclick="undoDayPersonAbsent(\'' + dateStr + '\',' + s.id + ')">↩ Toch aanwezig</button></div>';
+    }
+    html += '</div>';
   });
   html += '</div><div class="form-section"><div class="section-title">📊 Capaciteit</div>' +
     '<div class="field-row center"><span class="filter-label">Berekend: ' + cap + 'u</span><span class="filter-label">|</span>' +
     '<span class="filter-label">Overschrijven:</span>' +
     '<input type="number" step="0.5" class="input-num" id="day-cap-input" value="' + (capOv && capOv.capaciteit_override != null ? capOv.capaciteit_override : '') + '" placeholder="' + cap + '" />' +
     '<span class="unit">uur</span></div></div></div>' +
-    '<div class="modal-footer"><button class="btn-primary" onclick="saveDayCapOverride(\'' + dateStr + '\')">✓ Opslaan</button>' +
-    (capOv ? '<button class="btn-sm" onclick="resetDayCapOverride(' + capOv.id + ',\'' + dateStr + '\')">Reset</button>' : '') + '</div>';
+    '<div class="modal-footer"><button class="btn-primary" onclick="saveDayOverrides(\'' + dateStr + '\')">✓ Opslaan</button>' +
+    (capOv ? '<button class="btn-sm" onclick="resetDayCapOverride(' + capOv.id + ',\'' + dateStr + '\')">Reset capaciteit</button>' : '') + '</div>';
   openModal(html);
+}
+async function saveDayOverrides(dateStr) {
+  var promises = [];
+  state.personeel.forEach(function(p) {
+    var startEl = document.getElementById('dov-start-' + p.id);
+    var eindEl = document.getElementById('dov-eind-' + p.id);
+    var keurEl = document.getElementById('dov-keur-' + p.id);
+    if (!startEl || !eindEl) return;
+    var dk = dayKey(dateStr);
+    var rooster = p.weekrooster && p.weekrooster[dk];
+    var origStart = rooster ? rooster.start : '09:00';
+    var origEind = rooster ? rooster.eind : '17:00';
+    var origKeur = rooster ? rooster.keuringsuren : 4;
+    var newStart = startEl.value;
+    var newEind = eindEl.value;
+    var newKeur = keurEl ? parseFloat(keurEl.value) : null;
+    if (newStart !== origStart || newEind !== origEind || (newKeur !== null && newKeur !== origKeur)) {
+      promises.push(saveDagOverride({
+        datum: dateStr, persoon_id: p.id,
+        start_override: newStart, eind_override: newEind,
+        keuringsuren_override: newKeur
+      }));
+    }
+  });
+  // Save capacity override
+  var capVal = (document.getElementById('day-cap-input') || {}).value;
+  if (capVal !== '' && capVal !== undefined) {
+    promises.push(saveDagOverride({ datum: dateStr, persoon_id: null, capaciteit_override: parseFloat(capVal) }));
+  }
+  if (promises.length > 0) await Promise.all(promises);
+  await reloadDagOverrides(); closeModal(); render(); showToast('Dag aangepast ✓');
+}
+async function setDayPersonAbsent(dateStr, persoonId) {
+  await saveDagOverride({ datum: dateStr, persoon_id: persoonId, aanwezig: false });
+  await reloadDagOverrides(); closeModal(); render();
+  openDayOverride(dateStr); showToast('Vrij gezet voor deze dag');
+}
+async function undoDayPersonAbsent(dateStr, persoonId) {
+  var ov = getDagOverrideForPerson(persoonId, dateStr);
+  if (ov) await deleteDagOverride(ov.id);
+  await reloadDagOverrides(); closeModal(); render();
+  openDayOverride(dateStr); showToast('Weer aanwezig');
 }
 async function saveDayCapOverride(dateStr) {
   var val = (document.getElementById('day-cap-input') || {}).value;
