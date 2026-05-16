@@ -223,15 +223,17 @@ function renderCalendar() {
       if (staffAbsent.length > 0) html += '<span class="badge badge-absent">' + staffAbsent.length + '×afw</span>';
       html += '</div></div>';
 
-      // Staff vertical bars
+      // Staff vertical bars (absolute background)
       if (staffPresent.length > 0) {
-        html += '<div class="staff-bars">';
-        staffPresent.forEach(function(s) {
+        var barW = Math.floor(100 / staffPresent.length);
+        html += '<div class="staff-bars-bg">';
+        staffPresent.forEach(function(s, si) {
           var startH = timeToHours(s.start) - HOUR_START;
           var endH = timeToHours(s.eind) - HOUR_START;
           var topPct = (startH / totalHours) * 100;
           var heightPct = ((endH - startH) / totalHours) * 100;
-          html += '<div class="staff-bar" style="background:' + s.kleur + '18;border-color:' + s.kleur + ';top:' + topPct + '%;height:' + heightPct + '%">';
+          var leftPct = si * barW;
+          html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + '12;border-color:' + s.kleur + '">';
           html += '<span class="staff-bar-name" style="color:' + s.kleur + '">' + escHtml(s.naam) + '</span>';
           if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u</span>';
           html += '</div>';
@@ -523,7 +525,12 @@ function openEditPersoneelModal(id) {
   renderEditPersoneelForm();
 }
 
+function syncPersoneelForm() {
+  var nameEl = document.getElementById('ep-naam');
+  if (nameEl) window._editPerson.naam = nameEl.value;
+}
 function renderEditPersoneelForm() {
+  syncPersoneelForm();
   var p = window._editPerson;
   var isNew = window._editPersonIsNew;
   var html = '<div class="modal-header"><h2>' + (isNew ? '➕ Nieuwe medewerker' : '✏️ ' + escHtml(p.naam)) + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
