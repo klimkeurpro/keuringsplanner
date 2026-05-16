@@ -87,7 +87,7 @@
     .day-number { font-size: 15px; font-weight: 800; }
     .day-month { font-size: 9px; color: var(--text-faint); }
     .cal-day-badges { display: flex; gap: 3px; }
-    .cal-day-bottom { margin-top: auto; }
+    .cal-day-bottom { position: relative; z-index: 1; }
     .badge { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 99px; }
     .badge-today { color: #fff; background: var(--warning); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
     .badge-override { color: var(--accent); background: var(--accent-light); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
@@ -116,7 +116,7 @@
     .staff-bar-bg { position: absolute; border-left: 3px solid; border-radius: 0 4px 4px 0; padding: 2px 3px; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; opacity: 0.9; }
     .staff-bar-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
     .staff-bar-cap { font-size: 8px; opacity: 0.7; }
-    .cal-day-header, .cal-day-bottom, .cal-day-items { position: relative; z-index: 1; }
+    .cal-day-header, .cal-day-content, .cal-day-items { position: relative; z-index: 1; }
 
     /* ─── Kanban ─── */
     .kanban-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
