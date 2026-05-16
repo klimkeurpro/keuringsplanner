@@ -195,13 +195,15 @@ function renderCalendar() {
     '<span class="legend-item"><span class="legend-dot free-bg"></span> Vrij</span>' +
     '<span class="legend-sep">|</span><span class="legend-hint">Klik op dag = aanpassen</span></div>';
 
-  html += '<div class="cal-with-hours"><div class="hour-labels"><div class="hour-label-header"></div>';
-  for (var h = HOUR_START; h <= HOUR_END; h++) html += '<div class="hour-label">' + h + ':00</div>';
-  html += '</div><div class="cal-grid">';
-  html += '<div class="cal-header">' + DAY_NAMES_FULL.map(function(n) { return '<div class="cal-header-day">' + n + '</div>'; }).join('') + '</div>';
+  html += '<div class="cal-grid-outer">';
+  html += '<div class="cal-header"><div class="cal-header-spacer"></div>' + DAY_NAMES_FULL.map(function(n) { return '<div class="cal-header-day">' + n + '</div>'; }).join('') + '</div>';
+
+  var hourLabelsHtml = '<div class="hour-labels">';
+  for (var h = HOUR_START; h <= HOUR_END; h++) hourLabelsHtml += '<div class="hour-label">' + h + ':00</div>';
+  hourLabelsHtml += '</div>';
 
   weeks.forEach(function(week, wi) {
-    html += '<div class="cal-week">';
+    html += '<div class="cal-week-row">' + hourLabelsHtml + '<div class="cal-week">';
     week.forEach(function(dateStr) {
       var entry = calendar[dateStr];
       if (!entry) { html += '<div class="cal-day empty"></div>'; return; }
@@ -260,9 +262,9 @@ function renderCalendar() {
       html += tItems.map(renderCalPill).join('');
       html += '</div></div></div>';
     });
-    html += '</div>';
+    html += '</div></div>';
   });
-  html += '</div></div>';
+  html += '</div>';
   return html;
 }
 
