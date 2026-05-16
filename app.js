@@ -225,6 +225,25 @@ function renderCalendar() {
       if (staffAbsent.length > 0) html += '<span class="badge badge-absent">' + staffAbsent.length + '×afw</span>';
       html += '</div></div>';
 
+      // Capacity bar + pills (bovenin de cel)
+      var aItems = entry.items.filter(function(it) { return it.type === 'afspraak'; });
+      var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
+      var aHours = aItems.reduce(function(s, i) { return s + i.hours; }, 0);
+      var tHours = tItems.reduce(function(s, i) { return s + i.hours; }, 0);
+      var aPct = entry.capacity > 0 ? Math.min((aHours / entry.capacity) * 100, 100) : 0;
+      var tPct = entry.capacity > 0 ? Math.min((tHours / entry.capacity) * 100, 100 - aPct) : 0;
+
+      html += '<div class="cal-day-content">';
+      html += '<div class="capacity-bar"><div class="cap-afspraak" style="width:' + aPct + '%"></div><div class="cap-tussendoor" style="width:' + tPct + '%"></div></div>';
+      html += '<div class="cal-day-info ' + (isOver ? 'danger' : '') + '"><span>' + r2(entry.usedHours) + '/' + entry.capacity + 'u</span>';
+      if (freeH > 0 && !isOver) html += '<span class="free">' + r2(freeH) + 'u vrij</span>';
+      if (isOver) html += '<span class="over">OVER</span>';
+      html += '</div><div class="cal-day-items">';
+      html += aItems.map(renderCalPill).join('');
+      if (aItems.length > 0 && tItems.length > 0) html += '<div class="pill-divider"></div>';
+      html += tItems.map(renderCalPill).join('');
+      html += '</div></div>';
+
       // Staff vertical bars (absolute background)
       if (staffPresent.length > 0) {
         var barW = Math.floor(100 / staffPresent.length);
@@ -243,24 +262,7 @@ function renderCalendar() {
         html += '</div>';
       }
 
-      // Bottom: capacity bar + pills
-      var aItems = entry.items.filter(function(it) { return it.type === 'afspraak'; });
-      var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
-      var aHours = aItems.reduce(function(s, i) { return s + i.hours; }, 0);
-      var tHours = tItems.reduce(function(s, i) { return s + i.hours; }, 0);
-      var aPct = entry.capacity > 0 ? Math.min((aHours / entry.capacity) * 100, 100) : 0;
-      var tPct = entry.capacity > 0 ? Math.min((tHours / entry.capacity) * 100, 100 - aPct) : 0;
-
-      html += '<div class="cal-day-bottom">';
-      html += '<div class="capacity-bar"><div class="cap-afspraak" style="width:' + aPct + '%"></div><div class="cap-tussendoor" style="width:' + tPct + '%"></div></div>';
-      html += '<div class="cal-day-info ' + (isOver ? 'danger' : '') + '"><span>' + r2(entry.usedHours) + '/' + entry.capacity + 'u</span>';
-      if (freeH > 0 && !isOver) html += '<span class="free">' + r2(freeH) + 'u vrij</span>';
-      if (isOver) html += '<span class="over">OVER</span>';
-      html += '</div><div class="cal-day-items">';
-      html += aItems.map(renderCalPill).join('');
-      if (aItems.length > 0 && tItems.length > 0) html += '<div class="pill-divider"></div>';
-      html += tItems.map(renderCalPill).join('');
-      html += '</div></div></div>';
+      html += '</div>';
     });
     html += '</div></div>';
   });
