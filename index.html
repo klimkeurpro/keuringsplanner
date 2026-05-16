@@ -280,11 +280,17 @@
     .staff-day-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
     .staff-day-row:last-child { border-bottom: none; }
     .staff-day-row.staff-absent { opacity: 0.5; }
-    .staff-day-name { font-weight: 600; min-width: 90px; font-size: 13px; }
+    .staff-day-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .staff-day-edit-row:last-child { border-bottom: none; }
+    .staff-day-edit-row.staff-absent { opacity: 0.5; }
+    .staff-day-edit-left { display: flex; align-items: center; gap: 6px; }
+    .staff-day-edit-fields { display: flex; align-items: center; gap: 6px; }
+    .staff-day-name { font-weight: 600; min-width: 80px; font-size: 13px; }
     .staff-day-times { color: var(--text-muted); font-size: 12px; }
     .staff-day-cap { font-size: 12px; color: var(--accent); font-weight: 700; }
     .staff-day-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
     .staff-day-badge.absent { background: var(--danger-light); color: var(--danger); }
+    .hint-text { font-size: 11px; color: var(--text-faint); margin-bottom: 8px; font-style: italic; }
 
     /* ─── Password Screen ─── */
     .password-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
