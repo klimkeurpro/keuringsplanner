@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Simpeler: SG blokje groot centraal, kalender subtiel erin -->
+  <rect width="512" height="512" rx="80" fill="#1E3A1E"/>
+
+  <!-- Groot SG blokje centraal -->
+  <rect x="56" y="56" width="400" height="400" rx="48" fill="#4CAF50"/>
+
+  <!-- S links -->
+  <text x="145" y="290" font-family="Arial Black, sans-serif" font-size="200" font-weight="900" fill="#1E3A1E" text-anchor="middle">S</text>
+
+  <!-- Donker vlak rechtsonder voor G -->
+  <rect x="210" y="210" width="210" height="210" rx="32" fill="#1E3A1E"/>
+  <text x="316" y="390" font-family="Arial Black, sans-serif" font-size="168" font-weight="900" fill="#4CAF50" text-anchor="middle">G</text>
+
+  <!-- Kleine kalender-ringen bovenaan als detail -->
+  <rect x="175" y="40" width="16" height="36" rx="8" fill="#fff" opacity="0.7"/>
+  <rect x="321" y="40" width="16" height="36" rx="8" fill="#fff" opacity="0.7"/>
+</svg>
