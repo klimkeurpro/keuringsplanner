@@ -425,7 +425,9 @@ function renderPasswordScreen() {
     '<h1>⚙️ KeuringsPlanner</h1><p>Voer het wachtwoord in om verder te gaan</p>' +
     '<input type="password" class="input" id="pw-input" placeholder="Wachtwoord..." onkeydown="if(event.key===\'Enter\') checkPassword()" />' +
     '<button class="btn-primary full-width" onclick="checkPassword()" style="margin-top:10px">Inloggen</button>' +
-    '<div id="pw-error" class="pw-error"></div></div></div>';
+    '<div id="pw-error" class="pw-error"></div>' +
+    '<button class="btn-link" onclick="openWachtwoordVergeten()" style="margin-top:12px;background:none;border:none;color:#6B7280;font-size:13px;cursor:pointer;text-decoration:underline">Wachtwoord vergeten?</button>' +
+    '</div></div>';
   setTimeout(function() { var el = document.getElementById('pw-input'); if (el) el.focus(); }, 100);
 }
 async function checkPassword() {
@@ -447,6 +449,27 @@ async function checkPassword() {
   if (match) {
     state.authenticated = true; localStorage.setItem('kp_auth', 'true'); render();
   } else { document.getElementById('pw-error').textContent = 'Onjuist wachtwoord'; }
+}
+
+function openWachtwoordVergeten() {
+  var email = state.settings.email || '';
+  var sql = "UPDATE instellingen\nSET dag_overrides = dag_overrides - '__wachtwoord'\nWHERE id = 'global';";
+  var html = '<div class="modal-header"><h2>🔑 Wachtwoord vergeten</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    (email ? '<div class="form-section" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px"><p style="margin:0">Neem contact op met de beheerder:<br><strong><a href="mailto:' + escHtml(email) + '" style="color:#1D4ED8">' + escHtml(email) + '</a></strong></p></div>' : '') +
+    '<div class="form-section"><div class="section-title">Zelf resetten via Supabase</div>' +
+    '<p style="font-size:14px;color:#6B7280;margin-bottom:10px">Voer de volgende stappen uit:</p>' +
+    '<ol style="font-size:14px;color:#374151;line-height:1.8;padding-left:18px">' +
+    '<li>Ga naar <strong>supabase.com</strong> → jouw project</li>' +
+    '<li>Klik op <strong>SQL Editor</strong> → New query</li>' +
+    '<li>Plak onderstaande code en klik <strong>Run</strong></li>' +
+    '<li>Herlaad de app — je komt nu direct in de app</li>' +
+    '<li>Stel een nieuw wachtwoord in via <strong>⚙️ Instellingen</strong></li>' +
+    '</ol>' +
+    '<div style="background:#1E293B;color:#E2E8F0;font-family:monospace;font-size:13px;padding:12px 14px;border-radius:6px;margin-top:10px;white-space:pre">' + escHtml(sql) + '</div>' +
+    '<button class="btn-sm" style="margin-top:8px" onclick="navigator.clipboard&&navigator.clipboard.writeText(' + JSON.stringify(sql) + ').then(function(){showToast(\'Gekopieerd ✓\')})">📋 Kopieer SQL</button>' +
+    '</div></div>';
+  openModal(html);
 }
 
 // Actions
@@ -976,7 +999,7 @@ async function submitTodo(editId) {
 // Settings Modal
 function openSettingsModal() {
   window._settingsForm = { setTypes: state.settings.setTypes.map(function(s) { return Object.assign({}, s); }),
-    ruimtes: state.settings.ruimtes.slice(), wachtwoord: state.settings.wachtwoord || '' };
+    ruimtes: state.settings.ruimtes.slice(), wachtwoord: state.settings.wachtwoord || '', email: state.settings.email || '' };
   renderSettingsModal();
 }
 function renderSettingsModal() {
@@ -993,6 +1016,8 @@ function renderSettingsModal() {
     f.ruimtes.map(function(r, i) { return '<div class="field-row compact"><span class="flex-1">' + escHtml(r) + '</span><button class="btn-step btn-danger" onclick="window._settingsForm.ruimtes.splice(' + i + ',1); renderSettingsModal();">✕</button></div>'; }).join('') +
     '<div class="field-row compact"><input class="input flex-1" id="set-new-room" placeholder="Ruimte..." /><button class="btn-step" onclick="addSettRoom()">+</button></div></div>' +
     '<div class="form-section"><div class="section-title">🔒 Beveiliging</div>' +
+    '<div class="field"><label>E-mailadres beheerder</label>' +
+    '<input type="email" class="input" id="set-email" value="' + escHtml(f.email || '') + '" placeholder="info@bedrijf.nl" /></div>' +
     '<div class="field"><label>Wachtwoord (leeg = geen wachtwoord' + (f.wachtwoord ? ', huidig wachtwoord blijft als leeg gelaten' : '') + ')</label>' +
     '<input type="password" class="input" id="set-wachtwoord" value="" placeholder="' + (f.wachtwoord ? 'Nieuw wachtwoord (leeg = ongewijzigd)' : 'Stel een wachtwoord in...') + '" /></div></div></div></div>' +
     '<div class="modal-footer"><button class="btn-primary full-width" onclick="saveSettingsModal()">✓ Alles opslaan</button></div>';
@@ -1012,10 +1037,12 @@ function addSettRoom() {
 async function saveSettingsModal() {
   var wwInput = (document.getElementById('set-wachtwoord') || {}).value || '';
   var ww = wwInput ? await hashPassword(wwInput) : (window._settingsForm.wachtwoord || '');
+  var email = (document.getElementById('set-email') || {}).value || '';
   state.settings.setTypes = window._settingsForm.setTypes;
   state.settings.ruimtes = window._settingsForm.ruimtes;
   state.settings.wachtwoord = ww;
-  state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __wachtwoord: ww });
+  state.settings.email = email;
+  state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __wachtwoord: ww, __email: email });
   await saveInstellingen(state.settings);
   closeModal(); render(); showToast('Instellingen opgeslagen ✓');
 }
@@ -1202,7 +1229,7 @@ async function initApp() {
   state.loading = true; render();
   try {
     var results = await Promise.all([fetchInstellingen(), fetchKlussen(false), fetchArchief(), fetchTodos(), fetchPersoneel(), fetchAfwezigheden()]);
-    var inst = results[0]; if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; }
+    var inst = results[0]; if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; }
     state.jobs = results[1]; state.archief = results[2]; state.todos = results[3]; state.personeel = results[4]; state.afwezigheden = results[5];
     await reloadDagOverrides();
     // Check saved auth
@@ -1212,7 +1239,7 @@ async function initApp() {
   subscribeToChanges(
     async function() { state.jobs = await fetchKlussen(false); state.archief = await fetchArchief(); render(); },
     async function() { state.todos = await fetchTodos(); render(); },
-    async function() { var inst = await fetchInstellingen(); if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; } render(); },
+    async function() { var inst = await fetchInstellingen(); if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; } render(); },
     async function() { state.personeel = await fetchPersoneel(); state.afwezigheden = await fetchAfwezigheden(); await reloadDagOverrides(); render(); }
   );
 }
