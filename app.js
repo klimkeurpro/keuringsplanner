@@ -768,8 +768,8 @@ function openJobModal(id, isArchief) {
   renderJobModalContent();
 }
 
-function renderJobModalContent() {
-  syncFormToModal();
+function renderJobModalContent(skipSync) {
+  if (!skipSync) syncFormToModal();
   var form = window._modalForm, isNew = window._modalIsNew, isArchief = window._modalIsArchief;
   var totalItems = Object.values(form.aantallen).reduce(function(s,v) { return s + (v||0); }, 0);
   var setTypesHtml = state.settings.setTypes.map(function(st) {
@@ -1125,7 +1125,7 @@ function nieuweKlusVanVorige(id, bron) {
     contactLog: [], notities: ''
   };
   window._modalIsNew = true; window._modalIsArchief = false;
-  renderJobModalContent();
+  renderJobModalContent(true);
   showToast('Vooringevuld op basis van ' + formatDateShort(vorige.datumBinnen) + (heeftWerkelijk ? ' (werkelijke aantallen)' : '') + ' ✓');
 }
 
