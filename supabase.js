@@ -141,7 +141,7 @@ async function fetchPersoneel() {
 }
 
 async function savePersoneelslid(p) {
-  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, weekrooster: p.weekrooster, actief: p.actief !== false };
+  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null };
   if (p.id) {
     const { data, error } = await db.from('personeel').update(row).eq('id', p.id).select().single();
     if (error) { console.error('Fout bij opslaan personeelslid:', error); return null; }
@@ -194,13 +194,21 @@ async function saveDagOverride(ov) {
     datum: ov.datum, persoon_id: ov.persoon_id || null,
     aanwezig: ov.aanwezig !== false, start_override: ov.start_override || null,
     eind_override: ov.eind_override || null, keuringsuren_override: ov.keuringsuren_override ?? null,
-    capaciteit_override: ov.capaciteit_override ?? null,
+    capaciteit_override: ov.capaciteit_override ?? null, reden: ov.reden || null,
   }, { onConflict: 'datum,persoon_id' }).select().single();
   if (error) { console.error('Fout bij opslaan dag override:', error); return null; }
   return data;
 }
 
 async function deleteDagOverride(id) { const { error } = await db.from('dag_overrides').delete().eq('id', id); return !error; }
+
+async function fetchVakantieOverrides(jaar) {
+  const { data, error } = await db.from('dag_overrides').select('*')
+    .eq('reden', 'vakantie').gte('datum', jaar + '-01-01').lte('datum', jaar + '-12-31')
+    .not('persoon_id', 'is', null);
+  if (error) { console.error('Fout bij ophalen vakantie overrides:', error); return []; }
+  return data;
+}
 
 // ─── FOTO'S ───
 

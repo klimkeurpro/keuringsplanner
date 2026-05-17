@@ -154,3 +154,16 @@ ALTER PUBLICATION supabase_realtime ADD TABLE instellingen;
 -- KLAAR! Ga nu naar Settings → API om je
 -- URL en anon key te kopiëren voor config.js
 -- ============================================
+
+-- ============================================
+-- MIGRATIE: Uren-registratie (voer uit in SQL Editor als je de
+-- basistabellen al hebt aangemaakt)
+-- ============================================
+
+-- Voeg reden toe aan dag_overrides (vakantie / verlof / ziek)
+ALTER TABLE dag_overrides ADD COLUMN IF NOT EXISTS reden TEXT DEFAULT NULL;
+
+-- Voeg vakantie-uren per jaar toe aan personeel
+ALTER TABLE personeel ADD COLUMN IF NOT EXISTS vakantie_uren_per_jaar NUMERIC DEFAULT NULL;
+
+-- ============================================

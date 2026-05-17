@@ -13,7 +13,7 @@ const HOUR_START = 8;
 const HOUR_END = 18;
 const AFKEUR_OPTIES = ['Niet vervangen', 'Kleine reparaties meteen uitvoeren', 'Alles meteen vervangen voor vergelijkbaar product', 'Eerst bellen'];
 const STAFF_COLORS = ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#F97316','#6366F1','#14B8A6','#E11D48','#84CC16'];
-const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', anders: '📋 Anders' };
+const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', anders: '📋 Anders' };
 
 let state = {
   jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [],
@@ -32,6 +32,7 @@ let state = {
     wachtwoord: '',
   },
   activeTab: 'kalender', weeksToShow: 4, archiefZoek: '', loading: true, authenticated: false,
+  vakantieOverrides: null, urenJaar: new Date().getFullYear(),
 };
 
 // Password hashing
@@ -393,9 +394,10 @@ function render() {
     case 'kanban': tabContent = renderKanban(); break;
     case 'todo': tabContent = renderTodo(); break;
     case 'archief': tabContent = renderArchief(); break;
+    case 'uren': tabContent = renderUrenOverzicht(); break;
   }
-  var tabs = ['kalender','kanban','todo','archief'];
-  var tabLabels = { kalender:'📅 Kalender', kanban:'📋 Kanban', todo:'✅ To-do', archief:'📁 Archief' };
+  var tabs = ['kalender','kanban','todo','archief','uren'];
+  var tabLabels = { kalender:'📅 Kalender', kanban:'📋 Kanban', todo:'✅ To-do', archief:'📁 Archief', uren:'🏖️ Uren' };
   var tabBarHtml = tabs.map(function(tab) {
     return '<button class="tab-btn ' + (state.activeTab === tab ? 'active' : '') + '" onclick="switchTab(\'' + tab + '\')">' + tabLabels[tab] + '</button>';
   }).join('');
@@ -448,7 +450,13 @@ async function checkPassword() {
 }
 
 // Actions
-function switchTab(tab) { state.activeTab = tab; render(); }
+async function switchTab(tab) {
+  state.activeTab = tab;
+  if (tab === 'uren' && state.vakantieOverrides === null) {
+    state.vakantieOverrides = await fetchVakantieOverrides(state.urenJaar);
+  }
+  render();
+}
 async function changeJobStatus(id, newStatus) {
   var job = state.jobs.find(function(j) { return j.id === id; }); if (!job) return;
   job.status = newStatus; render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
@@ -499,11 +507,16 @@ function openDayOverride(dateStr) {
       (hasOverride ? '<span class="badge badge-override">aangepast</span>' : '') +
       '</div>';
     if (!absent) {
+      var ovReden = ov ? (ov.reden || '') : '';
+      var redenOpts = [['','— Roosterwijziging'],['vakantie','🏖️ Vakantie'],['verlof','📋 Verlof'],['ziek','🤒 Ziek']];
       html += '<div class="staff-day-edit-fields">' +
         '<input type="time" class="input-time" id="dov-start-' + s.id + '" value="' + s.start + '" />' +
         '<span>—</span>' +
         '<input type="time" class="input-time" id="dov-eind-' + s.id + '" value="' + s.eind + '" />';
       if (s.is_keurmeester) html += '<input type="number" step="0.5" class="input-num" id="dov-keur-' + s.id + '" value="' + s.keuringsuren + '" /><span class="unit">keur.u</span>';
+      html += '<select class="input" style="font-size:12px;padding:2px 4px;height:28px" id="dov-reden-' + s.id + '">' +
+        redenOpts.map(function(o) { return '<option value="' + o[0] + '"' + (ovReden === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+        '</select>';
       html += '<button class="btn-icon" title="Vrij deze dag" onclick="setDayPersonAbsent(\'' + dateStr + '\',' + s.id + ')">🚫</button>';
       html += '</div>';
     } else if (!reden) {
@@ -536,11 +549,13 @@ async function saveDayOverrides(dateStr) {
     var newStart = startEl.value;
     var newEind = eindEl.value;
     var newKeur = keurEl ? parseFloat(keurEl.value) : null;
-    if (newStart !== origStart || newEind !== origEind || (newKeur !== null && newKeur !== origKeur)) {
+    var redenEl = document.getElementById('dov-reden-' + p.id);
+    var newReden = redenEl ? redenEl.value : '';
+    if (newStart !== origStart || newEind !== origEind || (newKeur !== null && newKeur !== origKeur) || newReden) {
       promises.push(saveDagOverride({
         datum: dateStr, persoon_id: p.id,
         start_override: newStart, eind_override: newEind,
-        keuringsuren_override: newKeur
+        keuringsuren_override: newKeur, reden: newReden || null
       }));
     }
   });
@@ -628,7 +643,10 @@ function renderEditPersoneelForm() {
     '</div></div></div>' +
     '<div class="toggle-row" style="margin-top:8px" onclick="window._editPerson.is_keurmeester = !window._editPerson.is_keurmeester; renderEditPersoneelForm();">' +
     '<div class="toggle-switch ' + (p.is_keurmeester ? 'on' : '') + '"><div class="toggle-dot"></div></div>' +
-    '<span class="toggle-label">' + (p.is_keurmeester ? '🔧 Keurmeester — draagt bij aan capaciteit' : 'Geen keurmeester') + '</span></div></div>' +
+    '<span class="toggle-label">' + (p.is_keurmeester ? '🔧 Keurmeester — draagt bij aan capaciteit' : 'Geen keurmeester') + '</span></div>' +
+    '<div class="field" style="margin-top:10px"><label>🏖️ Vakantie-uren per jaar</label>' +
+    '<div class="field-row compact"><input type="number" step="1" class="input-num" style="width:70px" value="' + (p.vakantie_uren_per_jaar || '') + '" placeholder="200" onchange="window._editPerson.vakantie_uren_per_jaar=parseFloat(this.value)||0" /><span class="unit">uur</span>' +
+    '<span class="hint-text" style="margin-left:8px">bijv. 25 dagen × 8u = 200u</span></div></div></div>' +
     '<div class="form-section"><div class="section-title">📅 Weekrooster</div>';
   DAY_NAMES.forEach(function(d, di) {
     var r = p.weekrooster[d];
@@ -673,7 +691,7 @@ function openAfwezigheidModal() {
     '<div class="form-grid-2"><div class="field"><label>Wie</label><select class="input" id="af-persoon">' +
     state.personeel.map(function(p) { return '<option value="' + p.id + '">' + escHtml(p.naam) + '</option>'; }).join('') +
     '</select></div><div class="field"><label>Reden</label>' +
-    '<select class="input" id="af-reden"><option value="vakantie">🏖️ Vakantie</option><option value="ziek">🤒 Ziek</option><option value="anders">📋 Anders</option></select></div></div>' +
+    '<select class="input" id="af-reden"><option value="vakantie">🏖️ Vakantie</option><option value="ziek">🤒 Ziek</option><option value="verlof">📋 Verlof</option></select></div></div>' +
     '<div class="form-grid-2"><div class="field"><label>Van</label><input type="date" class="input" id="af-van" value="' + todayStr() + '" /></div>' +
     '<div class="field"><label>Tot en met</label><input type="date" class="input" id="af-tot" value="' + todayStr() + '" /></div></div>' +
     '<div class="field"><label>Notitie</label><input class="input" id="af-notitie" placeholder="Optioneel..." /></div>' +
@@ -966,6 +984,66 @@ async function reloadDagOverrides() {
   var startMonday = getMondayOfWeek(todayStr());
   var endDate = new Date(startMonday); endDate.setDate(endDate.getDate() + state.weeksToShow * 7);
   state.dagOverrides = await fetchDagOverrides(startMonday, toDateStr(endDate));
+}
+
+// Uren / vakantiesaldo
+function berekenVakantieUren(persoonId, jaar, vakantieOverrides) {
+  var p = state.personeel.find(function(x) { return x.id === persoonId; });
+  if (!p) return { toegekend: 0, opgenomen: 0, resterend: 0 };
+  var toegekend = parseFloat(p.vakantie_uren_per_jaar) || 0;
+  var opgenomen = 0;
+  state.afwezigheden.filter(function(a) {
+    return a.persoon_id === persoonId && a.reden === 'vakantie';
+  }).forEach(function(a) {
+    var cur = parseDate(a.van_datum); var end = parseDate(a.tot_datum);
+    while (cur <= end) {
+      var ds = toDateStr(cur);
+      if (ds.substring(0, 4) === String(jaar)) {
+        var dk = dayKey(ds);
+        if (dk) { var r = p.weekrooster && p.weekrooster[dk]; if (r && r.actief) opgenomen += timeToHours(r.eind) - timeToHours(r.start); }
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+  (vakantieOverrides || []).filter(function(ov) { return ov.persoon_id === persoonId; }).forEach(function(ov) {
+    var dk = dayKey(ov.datum); if (!dk) return;
+    var r = p.weekrooster && p.weekrooster[dk]; if (!r || !r.actief) return;
+    var normaal = timeToHours(r.eind) - timeToHours(r.start);
+    var actueel = timeToHours(ov.eind_override || r.eind) - timeToHours(ov.start_override || r.start);
+    var diff = r2(normaal - actueel); if (diff > 0) opgenomen += diff;
+  });
+  opgenomen = r2(opgenomen);
+  return { toegekend: toegekend, opgenomen: opgenomen, resterend: r2(toegekend - opgenomen) };
+}
+
+function renderUrenOverzicht() {
+  var jaar = state.urenJaar;
+  var ovs = state.vakantieOverrides || [];
+  var html = '<div class="page-section"><div class="section-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+    '<h2 style="margin:0">🏖️ Vakantiesaldo ' + jaar + '</h2>' +
+    '<div style="display:flex;gap:6px">' +
+    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar - 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">← ' + (jaar - 1) + '</button>' +
+    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar + 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">' + (jaar + 1) + ' →</button>' +
+    '</div></div>';
+  if (state.personeel.length === 0) return html + '<div class="empty-hint">Geen personeel geconfigureerd.</div></div>';
+  if (state.vakantieOverrides === null) return html + '<div class="empty-hint">Laden...</div></div>';
+  state.personeel.forEach(function(p) {
+    var s = berekenVakantieUren(p.id, jaar, ovs);
+    var pct = s.toegekend > 0 ? Math.min(100, Math.round(s.opgenomen / s.toegekend * 100)) : 0;
+    var barColor = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#10B981';
+    html += '<div class="card" style="margin-bottom:12px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+      '<div class="staff-color-dot" style="background:' + p.kleur + '"></div><strong>' + escHtml(p.naam) + '</strong></div>' +
+      '<div style="background:#F3F4F6;border-radius:6px;height:10px;margin-bottom:8px;overflow:hidden">' +
+      '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:6px"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:13px">' +
+      '<span>Opgenomen: <strong>' + s.opgenomen + 'u</strong></span>' +
+      '<span>Resterend: <strong style="color:' + (s.resterend < 0 ? '#EF4444' : '#059669') + '">' + s.resterend + 'u</strong></span>' +
+      '<span style="color:#6B7280">Totaal: ' + s.toegekend + 'u</span></div>' +
+      (s.toegekend === 0 ? '<div class="hint-text" style="margin-top:6px">Stel vakantie-uren in via 👥 Personeel → medewerker bewerken</div>' : '') +
+      '</div>';
+  });
+  return html + '</div>';
 }
 
 // Init
