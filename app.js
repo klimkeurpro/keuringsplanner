@@ -814,7 +814,7 @@ function renderJobModalContent(skipSync) {
     '<div class="section-title" style="color:#166534">✅ Werkelijk ontvangen sets</div>' +
     '<div class="hint-text" style="margin-bottom:8px">Vul in wat de klant écht heeft meegebracht — wordt zichtbaar in de klanthistoriek</div>' +
     '<div class="set-types-grid">' + setTypesWerkelijkHtml + '</div>' +
-    '<div class="set-types-total"><span>Totaal werkelijk: <strong id="werkelijk-totaal">' + totalWerkelijk + ' sets</strong></span></div></div>' : '') +
+    (function() { var totalMinW = 0; state.settings.setTypes.forEach(function(st) { totalMinW += ((form.aantallenWerkelijk && form.aantallenWerkelijk[st.id]) || 0) * st.minuten; }); var urenW = Math.round((totalMinW/60)*10)/10; return '<div class="set-types-total"><span>Totaal werkelijk: <strong id="werkelijk-totaal">' + totalWerkelijk + ' sets' + (totalWerkelijk > 0 ? ' · ' + urenW + 'u' : '') + '</strong></span></div></div>'; })() : '') +
     '<div class="form-section"><div class="section-title">🚫 Bij afkeur</div><div class="afkeur-options">' + afkeurHtml + '</div>' +
     '<input class="input" id="jf-afkeur-toel" value="' + escHtml(form.afkeurToelichting) + '" placeholder="Aanvullende afspraken bij afkeur..." /></div>' +
     '<div class="form-section"><div class="section-title">🔄 Binnenkomst & Aflevering</div><div class="form-grid-2">' +
@@ -871,7 +871,9 @@ function updateJobAantallenWerkelijk() {
   if (!form.aantallenWerkelijk) form.aantallenWerkelijk = {};
   document.querySelectorAll('.set-type-werkelijk-input').forEach(function(inp) { form.aantallenWerkelijk[inp.dataset.typeId] = parseInt(inp.value) || 0; });
   var totaal = Object.values(form.aantallenWerkelijk).reduce(function(s,v){return s+(v||0);},0);
-  var el = document.getElementById('werkelijk-totaal'); if (el) el.textContent = totaal + ' sets';
+  var totalMin = 0; state.settings.setTypes.forEach(function(st) { totalMin += (form.aantallenWerkelijk[st.id] || 0) * st.minuten; });
+  form.geschatteUrenWerkelijk = Math.round((totalMin / 60) * 10) / 10;
+  var el = document.getElementById('werkelijk-totaal'); if (el) el.textContent = totaal + ' sets · ' + form.geschatteUrenWerkelijk + 'u';
 }
 function addContactEntry() {
   var area = document.getElementById('contact-add-area'); if (!area) return;
@@ -1115,10 +1117,12 @@ function nieuweKlusVanVorige(id, bron) {
   var emptyAantallen = {}; state.settings.setTypes.forEach(function(st) { emptyAantallen[st.id] = 0; });
   var heeftWerkelijk = vorige.aantallenWerkelijk && Object.values(vorige.aantallenWerkelijk).some(function(v){return (parseInt(v)||0)>0;});
   var aantallen = Object.assign({}, emptyAantallen, heeftWerkelijk ? vorige.aantallenWerkelijk : vorige.aantallen);
+  var totalMin = 0; state.settings.setTypes.forEach(function(st) { totalMin += (aantallen[st.id] || 0) * st.minuten; });
+  var geschatteUren = totalMin > 0 ? Math.round((totalMin / 60) * 10) / 10 : vorige.geschatteUren;
   window._modalForm = {
     klant: vorige.klant, klantNummer: vorige.klantNummer, telefoon: vorige.telefoon,
     omschrijving: vorige.omschrijving, aantallen: aantallen, heeftAfspraak: false,
-    status: 'intake', geschatteUren: vorige.geschatteUren, afspraakDatum: '', afspraakTijd: '',
+    status: 'intake', geschatteUren: geschatteUren, afspraakDatum: '', afspraakTijd: '',
     binnenkomstWijze: vorige.binnenkomstWijze, binnenkomstDatum: todayStr(), binnenkomstTijd: nowTimeStr(),
     retourWijze: vorige.retourWijze, retourDatum: '', retourTijd: '',
     afkeurBeleid: vorige.afkeurBeleid, afkeurToelichting: vorige.afkeurToelichting,
