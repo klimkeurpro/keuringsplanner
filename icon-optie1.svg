@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Optie 1: Kalender met groen vinkje -->
+  <rect width="512" height="512" rx="90" fill="#1A1A2E"/>
+  <!-- Kalender body -->
+  <rect x="80" y="120" width="352" height="300" rx="20" fill="#16213E"/>
+  <rect x="80" y="120" width="352" height="80" rx="20" fill="#00A651"/>
+  <rect x="80" y="160" width="352" height="40" fill="#00A651"/>
+  <!-- Kalender ringen -->
+  <rect x="160" y="90" width="24" height="60" rx="12" fill="#fff"/>
+  <rect x="328" y="90" width="24" height="60" rx="12" fill="#fff"/>
+  <!-- Maand tekst -->
+  <text x="256" y="178" font-family="sans-serif" font-size="32" font-weight="700" fill="#fff" text-anchor="middle">KEU</text>
+  <!-- Grid -->
+  <rect x="108" y="230" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="174" y="230" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="240" y="230" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="306" y="230" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="108" y="290" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="174" y="290" width="52" height="44" rx="8" fill="#0F3460"/>
+  <!-- Vinkje -->
+  <rect x="240" y="290" width="118" height="44" rx="8" fill="#00A651"/>
+  <text x="300" y="320" font-family="sans-serif" font-size="28" font-weight="700" fill="#fff" text-anchor="middle">✓</text>
+  <rect x="108" y="350" width="52" height="44" rx="8" fill="#0F3460"/>
+  <rect x="174" y="350" width="52" height="44" rx="8" fill="#00A651" opacity="0.6"/>
+</svg>
