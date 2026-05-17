@@ -34,6 +34,16 @@ let state = {
   activeTab: 'kalender', weeksToShow: 4, archiefZoek: '', loading: true, authenticated: false,
 };
 
+// Password hashing
+async function hashPassword(password) {
+  if (!password) return '';
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function isHashed(value) { return /^[0-9a-f]{64}$/.test(value); }
+
 // Date helpers
 const toDateStr = (d) => d.toISOString().split('T')[0];
 const parseDate = (s) => new Date(s + 'T00:00:00');
@@ -416,9 +426,23 @@ function renderPasswordScreen() {
     '<div id="pw-error" class="pw-error"></div></div></div>';
   setTimeout(function() { var el = document.getElementById('pw-input'); if (el) el.focus(); }, 100);
 }
-function checkPassword() {
+async function checkPassword() {
   var input = (document.getElementById('pw-input') || {}).value;
-  if (input === state.settings.wachtwoord) {
+  var stored = state.settings.wachtwoord;
+  var match = false;
+  if (isHashed(stored)) {
+    match = (await hashPassword(input)) === stored;
+  } else {
+    // Backward compatibility: plain text stored — migrate to hash on success
+    match = input === stored;
+    if (match) {
+      var hashed = await hashPassword(input);
+      state.settings.wachtwoord = hashed;
+      state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __wachtwoord: hashed });
+      await saveInstellingen(state.settings);
+    }
+  }
+  if (match) {
     state.authenticated = true; localStorage.setItem('kp_auth', 'true'); render();
   } else { document.getElementById('pw-error').textContent = 'Onjuist wachtwoord'; }
 }
@@ -910,8 +934,8 @@ function renderSettingsModal() {
     f.ruimtes.map(function(r, i) { return '<div class="field-row compact"><span class="flex-1">' + escHtml(r) + '</span><button class="btn-step btn-danger" onclick="window._settingsForm.ruimtes.splice(' + i + ',1); renderSettingsModal();">✕</button></div>'; }).join('') +
     '<div class="field-row compact"><input class="input flex-1" id="set-new-room" placeholder="Ruimte..." /><button class="btn-step" onclick="addSettRoom()">+</button></div></div>' +
     '<div class="form-section"><div class="section-title">🔒 Beveiliging</div>' +
-    '<div class="field"><label>Wachtwoord (leeg = geen wachtwoord)</label>' +
-    '<input class="input" id="set-wachtwoord" value="' + escHtml(f.wachtwoord) + '" placeholder="Stel een wachtwoord in..." /></div></div></div></div>' +
+    '<div class="field"><label>Wachtwoord (leeg = geen wachtwoord' + (f.wachtwoord ? ', huidig wachtwoord blijft als leeg gelaten' : '') + ')</label>' +
+    '<input type="password" class="input" id="set-wachtwoord" value="" placeholder="' + (f.wachtwoord ? 'Nieuw wachtwoord (leeg = ongewijzigd)' : 'Stel een wachtwoord in...') + '" /></div></div></div></div>' +
     '<div class="modal-footer"><button class="btn-primary full-width" onclick="saveSettingsModal()">✓ Alles opslaan</button></div>';
   var existing = document.querySelector('.modal-overlay');
   if (existing) existing.querySelector('.modal-content').innerHTML = html;
@@ -927,7 +951,8 @@ function addSettRoom() {
   window._settingsForm.ruimtes.push(inp.value.trim()); renderSettingsModal();
 }
 async function saveSettingsModal() {
-  var ww = (document.getElementById('set-wachtwoord') || {}).value || '';
+  var wwInput = (document.getElementById('set-wachtwoord') || {}).value || '';
+  var ww = wwInput ? await hashPassword(wwInput) : (window._settingsForm.wachtwoord || '');
   state.settings.setTypes = window._settingsForm.setTypes;
   state.settings.ruimtes = window._settingsForm.ruimtes;
   state.settings.wachtwoord = ww;
