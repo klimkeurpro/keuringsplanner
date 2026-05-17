@@ -748,6 +748,11 @@ function syncFormToModal() {
   form.afspraakDatum = form.retourDatum || '';
   form.afspraakTijd = form.retourTijd || '';
   document.querySelectorAll('.set-type-input').forEach(function(inp) { form.aantallen[inp.dataset.typeId] = parseInt(inp.value) || 0; });
+  var werkelijkInputs = document.querySelectorAll('.set-type-werkelijk-input');
+  if (werkelijkInputs.length > 0) {
+    if (!form.aantallenWerkelijk) form.aantallenWerkelijk = {};
+    werkelijkInputs.forEach(function(inp) { form.aantallenWerkelijk[inp.dataset.typeId] = parseInt(inp.value) || 0; });
+  }
 }
 
 function openJobModal(id, isArchief) {
@@ -771,6 +776,12 @@ function renderJobModalContent() {
     return '<div class="set-type-row"><span class="set-type-label">' + escHtml(st.label) + '</span>' +
       '<input type="number" min="0" class="input-num set-type-input" data-type-id="' + st.id + '" value="' + (form.aantallen[st.id] || 0) + '" onchange="updateJobAantallen()" /></div>';
   }).join('');
+  var totalWerkelijk = form.aantallenWerkelijk ? Object.values(form.aantallenWerkelijk).reduce(function(s,v){return s+(v||0);},0) : 0;
+  var setTypesWerkelijkHtml = state.settings.setTypes.map(function(st) {
+    var val = (form.aantallenWerkelijk && form.aantallenWerkelijk[st.id]) || 0;
+    return '<div class="set-type-row"><span class="set-type-label">' + escHtml(st.label) + '</span>' +
+      '<input type="number" min="0" class="input-num set-type-werkelijk-input" data-type-id="' + st.id + '" value="' + val + '" onchange="updateJobAantallenWerkelijk()" /></div>';
+  }).join('');
   var afkeurHtml = AFKEUR_OPTIES.map(function(opt) {
     return '<label class="radio-option ' + (form.afkeurBeleid === opt ? 'selected' : '') + '">' +
       '<input type="radio" name="afkeur" value="' + escHtml(opt) + '" ' + (form.afkeurBeleid === opt ? 'checked' : '') +
@@ -787,13 +798,23 @@ function renderJobModalContent() {
   var html = '<div class="modal-header"><h2>' + (isNew ? '📥 Nieuwe klus' : '✏️ Klus bewerken') + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
     '<div class="modal-body job-form">' +
     '<div class="form-section"><div class="section-title">👤 Klantgegevens</div>' +
-    '<div class="form-grid-2-1"><div class="field"><label>Klantnaam *</label><input class="input" id="jf-klant" value="' + escHtml(form.klant) + '" placeholder="Van Dijk BV" /></div>' +
+    '<div class="form-grid-2-1"><div class="field"><label>Klantnaam *</label>' +
+    '<div style="position:relative">' +
+    '<input class="input" id="jf-klant" value="' + escHtml(form.klant) + '" placeholder="Typ naam of klantnummer..." autocomplete="off" oninput="zoekKlantAutocomplete(this.value)" onblur="setTimeout(sluitKlantDropdown,200)" />' +
+    '<div id="klant-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E5E7EB;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:999;max-height:280px;overflow-y:auto"></div>' +
+    '</div></div>' +
     '<div class="field"><label>Klantnummer</label><input class="input" id="jf-klantnr" value="' + escHtml(form.klantNummer) + '" placeholder="K-1042" /></div></div>' +
     '<div class="form-grid-2"><div class="field"><label>Telefoon</label><input class="input" id="jf-tel" value="' + escHtml(form.telefoon) + '" placeholder="06-12345678" /></div>' +
     '<div class="field"><label>Omschrijving</label><input class="input" id="jf-omschr" value="' + escHtml(form.omschrijving) + '" placeholder="Korte omschrijving" /></div></div></div>' +
-    '<div class="form-section"><div class="section-title">📦 Aantallen per type</div><div class="set-types-grid">' + setTypesHtml + '</div>' +
+    '<div id="klant-historiek-section"></div>' +
+    '<div class="form-section"><div class="section-title">📦 Afgesproken sets</div><div class="set-types-grid">' + setTypesHtml + '</div>' +
     '<div class="set-types-total"><span>Totaal: <strong>' + totalItems + ' items</strong></span>' +
     '<div class="field-row"><span>Uren:</span><input type="number" step="0.5" class="input-num" id="jf-uren" value="' + form.geschatteUren + '" onchange="window._modalForm.geschatteUren = parseFloat(this.value) || 0" /></div></div></div>' +
+    (!isNew ? '<div class="form-section" style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px">' +
+    '<div class="section-title" style="color:#166534">✅ Werkelijk ontvangen sets</div>' +
+    '<div class="hint-text" style="margin-bottom:8px">Vul in wat de klant écht heeft meegebracht — wordt zichtbaar in de klanthistoriek</div>' +
+    '<div class="set-types-grid">' + setTypesWerkelijkHtml + '</div>' +
+    '<div class="set-types-total"><span>Totaal werkelijk: <strong id="werkelijk-totaal">' + totalWerkelijk + ' sets</strong></span></div></div>' : '') +
     '<div class="form-section"><div class="section-title">🚫 Bij afkeur</div><div class="afkeur-options">' + afkeurHtml + '</div>' +
     '<input class="input" id="jf-afkeur-toel" value="' + escHtml(form.afkeurToelichting) + '" placeholder="Aanvullende afspraken bij afkeur..." /></div>' +
     '<div class="form-section"><div class="section-title">🔄 Binnenkomst & Aflevering</div><div class="form-grid-2">' +
@@ -822,6 +843,17 @@ function renderJobModalContent() {
   if (existing) existing.querySelector('.modal-content').innerHTML = html;
   else openModal(html);
   if (!window._modalIsNew && form.id) loadFotos(form.id);
+  // Auto-populate klant historiek
+  if (form.klant) {
+    var match = getUniekeKlanten().find(function(k) {
+      if (form.klantNummer && k.klantNummer && k.klantNummer.toLowerCase() === form.klantNummer.toLowerCase()) return true;
+      return k.klant.toLowerCase() === form.klant.toLowerCase();
+    });
+    if (match) {
+      var prevJobs = match.jobs.filter(function(j) { return j.id !== form.id; });
+      if (prevJobs.length > 0) toonKlantHistoriekInModal({ klant: match.klant, jobs: prevJobs, bezoeken: prevJobs.length });
+    }
+  }
 }
 
 // Job modal helpers
@@ -833,6 +865,13 @@ function updateJobAantallen() {
   var urenInp = document.getElementById('jf-uren'); if (urenInp) urenInp.value = form.geschatteUren;
   var totalEl = document.querySelector('.set-types-total strong');
   if (totalEl) totalEl.textContent = Object.values(form.aantallen).reduce(function(s,v){return s+(v||0);}, 0) + ' items';
+}
+function updateJobAantallenWerkelijk() {
+  var form = window._modalForm; if (!form) return;
+  if (!form.aantallenWerkelijk) form.aantallenWerkelijk = {};
+  document.querySelectorAll('.set-type-werkelijk-input').forEach(function(inp) { form.aantallenWerkelijk[inp.dataset.typeId] = parseInt(inp.value) || 0; });
+  var totaal = Object.values(form.aantallenWerkelijk).reduce(function(s,v){return s+(v||0);},0);
+  var el = document.getElementById('werkelijk-totaal'); if (el) el.textContent = totaal + ' sets';
 }
 function addContactEntry() {
   var area = document.getElementById('contact-add-area'); if (!area) return;
@@ -984,6 +1023,110 @@ async function reloadDagOverrides() {
   var startMonday = getMondayOfWeek(todayStr());
   var endDate = new Date(startMonday); endDate.setDate(endDate.getDate() + state.weeksToShow * 7);
   state.dagOverrides = await fetchDagOverrides(startMonday, toDateStr(endDate));
+}
+
+// === KLANT AUTOCOMPLETE & HISTORIEK ===
+function getUniekeKlanten() {
+  var map = {};
+  state.jobs.concat(state.archief).slice().sort(function(a, b) {
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  }).forEach(function(j) {
+    if (!j.klant || !j.klant.trim()) return;
+    var key = (j.klantNummer && j.klantNummer.trim())
+      ? 'nr:' + j.klantNummer.toLowerCase().trim()
+      : 'nm:' + j.klant.toLowerCase().trim();
+    if (!map[key]) map[key] = { klant: j.klant, klantNummer: j.klantNummer || '', telefoon: j.telefoon || '', jobs: [], laatste: null };
+    map[key].jobs.push(j);
+    if (!map[key].laatste || (j.createdAt || '') > (map[key].laatste.createdAt || '')) {
+      map[key].laatste = j;
+      map[key].klant = j.klant;
+      map[key].klantNummer = j.klantNummer || map[key].klantNummer;
+      map[key].telefoon = j.telefoon || map[key].telefoon;
+    }
+  });
+  return Object.values(map).map(function(k) { return Object.assign({}, k, { bezoeken: k.jobs.length }); });
+}
+
+function zoekKlantAutocomplete(query) {
+  var dd = document.getElementById('klant-dropdown'); if (!dd) return;
+  if (!query || query.length < 2) { sluitKlantDropdown(); return; }
+  var q = query.toLowerCase();
+  var resultaten = getUniekeKlanten().filter(function(k) {
+    return k.klant.toLowerCase().includes(q) || (k.klantNummer && k.klantNummer.toLowerCase().includes(q));
+  }).slice(0, 7);
+  if (resultaten.length === 0) { sluitKlantDropdown(); return; }
+  window._klantSuggesties = resultaten;
+  dd.innerHTML = resultaten.map(function(k, i) {
+    var totaal = k.laatste && k.laatste.aantallen ? Object.values(k.laatste.aantallen).reduce(function(s,v){return s+(parseInt(v)||0);},0) : 0;
+    var werkelijk = k.laatste && k.laatste.aantallenWerkelijk ? Object.values(k.laatste.aantallenWerkelijk).reduce(function(s,v){return s+(parseInt(v)||0);},0) : null;
+    var setsStr = werkelijk !== null ? werkelijk + ' sets werkelijk' : (totaal > 0 ? totaal + ' sets' : '');
+    return '<div onmousedown="selecteerKlantSuggestie(' + i + ')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #F3F4F6" onmouseover="this.style.background=\'#F9FAFB\'" onmouseout="this.style.background=\'\'">' +
+      '<div style="font-weight:600;font-size:14px">' + escHtml(k.klant) +
+      (k.klantNummer ? ' <span style="color:#9CA3AF;font-weight:normal;font-size:12px">' + escHtml(k.klantNummer) + '</span>' : '') + '</div>' +
+      '<div style="font-size:12px;color:#6B7280">' +
+      (k.bezoeken > 1 ? k.bezoeken + '× geweest · ' : '') +
+      'Laatste: ' + formatDateShort(k.laatste && (k.laatste.datumBinnen || k.laatste.createdAt)) +
+      (setsStr ? ' · ' + setsStr : '') + '</div></div>';
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function selecteerKlantSuggestie(i) {
+  var k = window._klantSuggesties && window._klantSuggesties[i]; if (!k) return;
+  var nameEl = document.getElementById('jf-klant');
+  var nrEl = document.getElementById('jf-klantnr');
+  var telEl = document.getElementById('jf-tel');
+  if (nameEl) nameEl.value = k.klant;
+  if (nrEl) nrEl.value = k.klantNummer || '';
+  if (telEl && k.telefoon) telEl.value = k.telefoon;
+  if (window._modalForm) { window._modalForm.klant = k.klant; window._modalForm.klantNummer = k.klantNummer || ''; window._modalForm.telefoon = k.telefoon || ''; }
+  sluitKlantDropdown();
+  var prevJobs = k.jobs.filter(function(j) { return j.id !== (window._modalForm && window._modalForm.id); });
+  if (prevJobs.length > 0) toonKlantHistoriekInModal({ klant: k.klant, jobs: prevJobs, bezoeken: prevJobs.length });
+}
+
+function sluitKlantDropdown() {
+  var dd = document.getElementById('klant-dropdown');
+  if (dd) { dd.innerHTML = ''; dd.style.display = 'none'; }
+}
+
+function toonKlantHistoriekInModal(klantData) {
+  var container = document.getElementById('klant-historiek-section'); if (!container) return;
+  var jobs = klantData.jobs.slice().sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  var html = '<div class="form-section" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px">' +
+    '<div class="section-title" style="color:#1D4ED8">📋 Eerder bij ons geweest (' + klantData.bezoeken + '×)</div>';
+  jobs.slice(0, 5).forEach(function(j) {
+    var totaal = Object.values(j.aantallen || {}).reduce(function(s,v){return s+(parseInt(v)||0);},0);
+    var werkelijk = j.aantallenWerkelijk ? Object.values(j.aantallenWerkelijk).reduce(function(s,v){return s+(parseInt(v)||0);},0) : null;
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #BFDBFE">' +
+      '<div><span style="font-size:13px;font-weight:600">' + formatDateShort(j.datumBinnen || j.createdAt) + '</span>' +
+      ' <span style="font-size:12px;color:#6B7280">afgesproken: ' + totaal + ' sets' +
+      (werkelijk !== null ? ' · <strong style="color:' + (werkelijk > totaal ? '#DC2626' : '#059669') + '">werkelijk: ' + werkelijk + '</strong>' : '') + '</span>' +
+      (j.omschrijving ? '<div style="font-size:12px;color:#6B7280">' + escHtml(j.omschrijving) + '</div>' : '') + '</div>' +
+      '<button class="btn-sm" style="white-space:nowrap;font-size:12px" onclick="nieuweKlusVanVorige(' + j.id + ',\'' + (j.gearchiveerd ? 'archief' : 'jobs') + '\')">↩ Gebruik als basis</button>' +
+      '</div>';
+  });
+  container.innerHTML = html + '</div>';
+}
+
+function nieuweKlusVanVorige(id, bron) {
+  var vorige = (bron === 'archief' ? state.archief : state.jobs).find(function(j) { return j.id === id; });
+  if (!vorige) return;
+  var emptyAantallen = {}; state.settings.setTypes.forEach(function(st) { emptyAantallen[st.id] = 0; });
+  var heeftWerkelijk = vorige.aantallenWerkelijk && Object.values(vorige.aantallenWerkelijk).some(function(v){return (parseInt(v)||0)>0;});
+  var aantallen = Object.assign({}, emptyAantallen, heeftWerkelijk ? vorige.aantallenWerkelijk : vorige.aantallen);
+  window._modalForm = {
+    klant: vorige.klant, klantNummer: vorige.klantNummer, telefoon: vorige.telefoon,
+    omschrijving: vorige.omschrijving, aantallen: aantallen, heeftAfspraak: false,
+    status: 'intake', geschatteUren: vorige.geschatteUren, afspraakDatum: '', afspraakTijd: '',
+    binnenkomstWijze: vorige.binnenkomstWijze, binnenkomstDatum: todayStr(), binnenkomstTijd: nowTimeStr(),
+    retourWijze: vorige.retourWijze, retourDatum: '', retourTijd: '',
+    afkeurBeleid: vorige.afkeurBeleid, afkeurToelichting: vorige.afkeurToelichting,
+    contactLog: [], notities: ''
+  };
+  window._modalIsNew = true; window._modalIsArchief = false;
+  renderJobModalContent();
+  showToast('Vooringevuld op basis van ' + formatDateShort(vorige.datumBinnen) + (heeftWerkelijk ? ' (werkelijke aantallen)' : '') + ' ✓');
 }
 
 // Uren / vakantiesaldo

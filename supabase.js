@@ -66,6 +66,7 @@ function mapKlusFromDB(row) {
     datumBinnen: row.datum_binnen || '', afkeurBeleid: row.afkeur_beleid || '',
     afkeurToelichting: row.afkeur_toelichting || '', contactLog: row.contact_log || [],
     notities: row.notities || '', gearchiveerd: row.gearchiveerd || false,
+    aantallenWerkelijk: row.aantallen_werkelijk || null,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -84,6 +85,7 @@ function mapKlusToDB(klus) {
     afkeur_beleid: klus.afkeurBeleid || '', afkeur_toelichting: klus.afkeurToelichting || '',
     contact_log: klus.contactLog || [], notities: klus.notities || '',
     gearchiveerd: klus.gearchiveerd || false,
+    aantallen_werkelijk: klus.aantallenWerkelijk || null,
   };
 }
 

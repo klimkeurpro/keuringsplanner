@@ -166,4 +166,7 @@ ALTER TABLE dag_overrides ADD COLUMN IF NOT EXISTS reden TEXT DEFAULT NULL;
 -- Voeg vakantie-uren per jaar toe aan personeel
 ALTER TABLE personeel ADD COLUMN IF NOT EXISTS vakantie_uren_per_jaar NUMERIC DEFAULT NULL;
 
+-- Voeg werkelijk ontvangen aantallen toe aan klussen
+ALTER TABLE klussen ADD COLUMN IF NOT EXISTS aantallen_werkelijk JSONB DEFAULT NULL;
+
 -- ============================================
