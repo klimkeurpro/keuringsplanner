@@ -412,6 +412,7 @@ function render() {
     '<button class="btn-header" onclick="openPersoneelModal()">👥 Personeel</button>' +
     '<button class="btn-header" onclick="openAfwezigheidModal()">🏖️ Afwezigheid</button>' +
     '<button class="btn-header" onclick="openSettingsModal()">⚙️ Instellingen</button>' +
+    '<button class="btn-header" onclick="openHandleiding()" title="Handleiding">❓</button>' +
     '<button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe klus</button>' +
     '</div></div></header>' +
     '<main class="main">' + (showStats ? renderStatsBar() : '') +
@@ -449,6 +450,64 @@ async function checkPassword() {
   if (match) {
     state.authenticated = true; localStorage.setItem('kp_auth', 'true'); render();
   } else { document.getElementById('pw-error').textContent = 'Onjuist wachtwoord'; }
+}
+
+function openHandleiding() {
+  var s = function(t) { return '<div style="font-weight:700;font-size:14px;color:#1E293B;margin:16px 0 6px">' + t + '</div>'; };
+  var p = function(t) { return '<p style="font-size:13px;color:#374151;line-height:1.7;margin-bottom:6px">' + t + '</p>'; };
+  var li = function(items) { return '<ul style="font-size:13px;color:#374151;line-height:1.9;padding-left:18px;margin-bottom:6px">' + items.map(function(i){return '<li>' + i + '</li>';}).join('') + '</ul>'; };
+  var html = '<div class="modal-header"><h2>❓ Handleiding KeuringsPlanner</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+
+    s('📥 Nieuwe klus aanmaken') +
+    p('Klik rechtsboven op <strong>+ Nieuwe klus</strong>.') +
+    li([
+      'Typ de klantnaam — bekende klanten verschijnen automatisch in een lijst. Klik erop om naam, klantnummer en telefoon in te vullen.',
+      'Bij een terugkerende klant zie je een blauw kader met eerdere bezoeken en aantallen.',
+      'Gebruik <strong>"↩ Gebruik als basis"</strong> om een nieuwe klus voor te vullen met de aantallen van het vorige bezoek.',
+      'Vul de <strong>afgesproken sets</strong> in per type. De uren worden automatisch berekend.',
+      'Heb je een afleverdatum? Vul die in — de klus krijgt dan automatisch voorrang in de planning.',
+    ]) +
+
+    s('✅ Werkelijk ontvangen sets') +
+    p('Zodra een klus binnenkomt en je ziet hoeveel sets er echt zijn, vul je dit in via <strong>Klus bewerken → Werkelijk ontvangen sets</strong> (groen kader). Dit aantal is zichtbaar in de historiek bij volgende afspraken.') +
+
+    s('📋 Kanban bord') +
+    p('Het kanban bord toont alle klussen in vier kolommen:') +
+    li([
+      '<strong>Intake</strong> — net binnengekomen, nog niet opgepakt',
+      '<strong>In behandeling</strong> — wordt aan gewerkt',
+      '<strong>Klaar</strong> — klaar voor aflevering',
+      '<strong>Afgeleverd</strong> — afgerond',
+    ]) +
+    p('Volgorde: klussen <em>met</em> afleverdatum staan bovenaan (vroegste eerst). Klussen <em>zonder</em> datum staan op volgorde van binnenkomst — wie het eerst komt, wordt het eerst geholpen.') +
+
+    s('📅 Kalender & capaciteit') +
+    p('De kalender toont per dag hoeveel keuringsuren beschikbaar zijn en hoeveel er al ingepland is. Klik op een dag om tijden aan te passen of iemand vrij te zetten. Geef bij een uurwijziging altijd de reden op (vakantie, verlof, ziek of roosterwijziging) — dit wordt gebruikt voor het vakantiesaldo.') +
+
+    s('🏖️ Afwezigheid & vakantiesaldo') +
+    li([
+      'Klik op <strong>🏖️ Afwezigheid</strong> voor hele periodes (vakantie, ziekte, verlof).',
+      'Voor een paar uur: pas de tijden aan via de kalender en kies de reden.',
+      'Het <strong>🏖️ Uren</strong> tabblad toont per medewerker hoeveel vakantie-uren zijn opgenomen en hoeveel er nog over zijn.',
+      'Vakantie-uren per jaar stel je in via <strong>👥 Personeel → medewerker bewerken</strong>.',
+    ]) +
+
+    s('👥 Personeel') +
+    p('Voeg medewerkers toe, stel hun weekrooster in en geef aan of ze keurmeester zijn. Keurmeesters tellen mee in de dagcapaciteit.') +
+
+    s('⚙️ Instellingen') +
+    li([
+      'Stel een <strong>wachtwoord</strong> in zodat alleen collega\'s bij de app kunnen.',
+      'Vergeten? Klik op "Wachtwoord vergeten?" op het inlogscherm.',
+      'Voeg set-types of ruimtes toe die bij jullie situatie passen.',
+    ]) +
+
+    s('📱 App installeren op telefoon of computer') +
+    p('Op telefoon (Chrome/Safari): open de app via de browser, tik op <strong>Delen → Zet op beginscherm</strong>. Op computer (Chrome): klik op het installeer-icoon rechts in de adresbalk.') +
+
+    '</div>';
+  openModal(html, true);
 }
 
 function openWachtwoordVergeten() {
