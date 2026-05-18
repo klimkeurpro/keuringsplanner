@@ -98,9 +98,10 @@
     .badge-today { color: #fff; background: var(--warning); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
     .badge-override { color: var(--accent); background: var(--accent-light); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
     .badge-absent { background: var(--danger-light); color: var(--danger); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
-    .capacity-bar { width: 100%; background: var(--border); border-radius: 5px; height: 6px; overflow: hidden; display: flex; margin-bottom: 2px; }
+    .capacity-bar { width: 100%; background: var(--success-light); border-radius: 5px; height: 6px; overflow: hidden; display: flex; margin-bottom: 2px; }
     .cap-afspraak { height: 100%; background: var(--accent); transition: width 0.3s; }
     .cap-tussendoor { height: 100%; background: var(--text-faint); transition: width 0.3s; }
+    .cap-losse-afspraak { height: 100%; background: var(--warning); transition: width 0.3s; }
     .cal-day-info { font-size: 9px; color: var(--text-muted); font-weight: 600; margin-bottom: 3px; display: flex; justify-content: space-between; }
     .cal-day-info.danger { color: var(--danger); }
     .cal-day-info .free { color: var(--success); font-size: 10px; }
@@ -124,6 +125,16 @@
     .staff-bar-cap { font-size: 8px; opacity: 0.7; }
     .cal-day-header, .cal-day-content, .cal-day-items { position: relative; z-index: 1; }
     .cal-day-content { margin-top: 55px; }
+
+    /* ─── Afspraak blok in staff bars ─── */
+    .afspraak-blok {
+      position: absolute; left: 2px; right: 2px;
+      border-radius: 3px; padding: 1px 3px;
+      font-size: 8px; font-weight: 700; color: #fff;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      cursor: pointer; opacity: 0.9;
+    }
+    .afspraak-blok:hover { opacity: 1; }
 
     /* ─── Kanban ─── */
     .kanban-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
