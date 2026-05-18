@@ -227,7 +227,6 @@ function renderCalendar() {
     '<span class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span> Keuring (met datum)</span>' +
     '<span class="legend-item"><span class="legend-dot muted-bg"></span> Wachtlijst</span>' +
     '<span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Vrij</span>' +
-    '<span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span> Losse afspraak</span>' +
     '<span class="legend-sep">|</span><span class="legend-hint">Klik op naam in balk → afspraak plannen</span></div>';
 
   html += '<div class="cal-grid-outer">';
