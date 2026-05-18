@@ -16,7 +16,7 @@ const STAFF_COLORS = ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899
 const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', anders: '📋 Anders' };
 
 let state = {
-  jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [],
+  jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [], afspraken: [],
   settings: {
     template: { ma: 8, di: 8, wo: 8, do: 8, vr: 8 },
     setTypes: [
@@ -90,9 +90,18 @@ function getStaffForDay(dateStr) {
   const dk = dayKey(dateStr); if (!dk) return [];
   return state.personeel.map(p => {
     const rooster = p.weekrooster && p.weekrooster[dk];
+    const ov = getDagOverrideForPerson(p.id, dateStr);
+    // ZZP'ers: only include if there's an explicit aanwezig:true override for this day
+    if (p.is_zzper) {
+      if (!ov || ov.aanwezig !== true) return null;
+      return { ...p, aanwezig: true,
+        start: (ov && ov.start_override) || '09:00',
+        eind: (ov && ov.eind_override) || '17:00',
+        keuringsuren: (ov && ov.keuringsuren_override != null) ? ov.keuringsuren_override : (p.is_keurmeester ? 4 : 0),
+      };
+    }
     if (!rooster || !rooster.actief) return null;
     if (isPersonAfwezig(p.id, dateStr)) return { ...p, aanwezig: false, reden: getAfwezigheidReden(p.id, dateStr), start: rooster.start, eind: rooster.eind, keuringsuren: 0 };
-    const ov = getDagOverrideForPerson(p.id, dateStr);
     return { ...p, aanwezig: ov ? ov.aanwezig !== false : true,
       start: (ov && ov.start_override) || rooster.start || '09:00',
       eind: (ov && ov.eind_override) || rooster.eind || '17:00',
@@ -320,7 +329,7 @@ function renderKanban() {
         (status === 'afgeleverd' ? '<button class="btn-sm btn-archive" onclick="doArchiveerKlus(' + job.id + ')">📁 Archiveer</button>' : '') +
         '<button class="btn-sm btn-delete" onclick="doDeleteJob(' + job.id + ')">🗑</button></div></div>';
     });
-    if (col.length === 0) html += '<div class="kanban-empty">Geen klussen</div>';
+    if (col.length === 0) html += '<div class="kanban-empty">Geen keuringen</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -369,8 +378,8 @@ function renderArchief() {
   var z = state.archiefZoek.toLowerCase();
   var results = state.archief.filter(function(k) { return !z || k.klant.toLowerCase().indexOf(z) >= 0 || (k.klantNummer || '').toLowerCase().indexOf(z) >= 0 || k.omschrijving.toLowerCase().indexOf(z) >= 0; });
   var html = '<div class="archief-search"><input type="text" class="input" placeholder="Zoek op klantnaam, nummer of omschrijving..." value="' + escHtml(state.archiefZoek) + '" oninput="state.archiefZoek = this.value; render();" />' +
-    '<span class="archief-count">' + results.length + ' klus' + (results.length !== 1 ? 'sen' : '') + ' in archief</span></div>';
-  if (results.length === 0) html += '<div class="empty-state">Geen gearchiveerde klussen' + (z ? ' gevonden' : '') + '</div>';
+    '<span class="archief-count">' + results.length + ' keuring' + (results.length !== 1 ? 'en' : '') + ' in archief</span></div>';
+  if (results.length === 0) html += '<div class="empty-state">Geen gearchiveerde keuringen' + (z ? ' gevonden' : '') + '</div>';
   else results.forEach(function(job) {
     html += '<div class="archief-card" onclick="openJobModal(' + job.id + ', true)"><div class="archief-card-left">' +
       '<div class="archief-card-name">' + escHtml(job.klant) + '</div><div class="archief-card-desc">' + escHtml(job.omschrijving) + '</div>' +
@@ -413,7 +422,7 @@ function render() {
     '<button class="btn-header" onclick="openAfwezigheidModal()">🏖️ Afwezigheid</button>' +
     '<button class="btn-header" onclick="openSettingsModal()">⚙️ Instellingen</button>' +
     '<button class="btn-header" onclick="openHandleiding()" title="Handleiding">❓</button>' +
-    '<button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe klus</button>' +
+    '<button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe keuring</button>' +
     '</div></div></header>' +
     '<main class="main">' + (showStats ? renderStatsBar() : '') +
     '<div class="tab-bar-row"><div class="tab-bar">' + tabBarHtml + '</div>' + weekPicker + '</div>' +
