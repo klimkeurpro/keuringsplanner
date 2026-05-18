@@ -12,7 +12,7 @@ const WARNING_DAYS = 8;
 const HOUR_START = 8;
 const HOUR_END = 18;
 const AFKEUR_OPTIES = ['Niet vervangen', 'Kleine reparaties meteen uitvoeren', 'Alles meteen vervangen voor vergelijkbaar product', 'Eerst bellen'];
-const STAFF_COLORS = ['#2563EB','#DC2626','#16A34A','#D97706','#7C3AED','#DB2777','#0891B2','#EA580C','#65A30D','#0F766E','#9333EA','#92400E'];
+const STAFF_COLORS = ['#DC2626','#EA580C','#D97706','#CA8A04','#65A30D','#16A34A','#0891B2','#2563EB','#4338CA','#6D28D9','#7C3AED','#9333EA','#C026D3','#DB2777','#E11D48'];
 const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', anders: '📋 Anders' };
 
 let state = {
