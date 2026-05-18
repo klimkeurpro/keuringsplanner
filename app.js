@@ -541,51 +541,63 @@ function openHandleiding() {
     '<div class="modal-body">' +
 
     s('📥 Nieuwe keuring aanmaken') +
-    p('Klik rechtsboven op <strong>+ Nieuwe keuring</strong>.') +
     li([
-      'Typ de klantnaam — bekende klanten verschijnen automatisch in een lijst. Klik erop om naam, klantnummer en telefoon in te vullen.',
-      'Bij een terugkerende klant zie je een blauw kader met eerdere bezoeken en aantallen.',
-      'Gebruik <strong>"↩ Gebruik als basis"</strong> om een nieuwe keuring voor te vullen met de aantallen van het vorige bezoek.',
-      'Vul de <strong>afgesproken sets</strong> in per type. De uren worden automatisch berekend.',
-      'Heb je een afleverdatum? Vul die in — de keuring krijgt dan automatisch voorrang in de planning.',
+      'Klik rechtsboven op <strong>+ Nieuwe keuring</strong>.',
+      'Typ de klantnaam — bekende klanten verschijnen als lijst. Klik erop om gegevens in te vullen.',
+      'Bij terugkerende klant zie je een blauw kader met eerdere bezoeken. Gebruik <strong>"↩ Gebruik als basis"</strong> om aantallen over te nemen.',
+      'Vul de <strong>afgesproken sets</strong> in per type — uren worden automatisch berekend.',
+      'Optioneel: koppel een <strong>keurmeester</strong> aan de keuring. Die ziet een blok in zijn personeelsbalk op de kalender.',
     ]) +
 
     s('✅ Werkelijk ontvangen sets') +
-    p('Zodra een keuring binnenkomt en je ziet hoeveel sets er echt zijn, vul je dit in via <strong>Keuring bewerken → Werkelijk ontvangen sets</strong> (groen kader). Dit aantal is zichtbaar in de historiek bij volgende afspraken.') +
+    p('Zodra de keuring binnenkomt: open de keuring en vul de werkelijke aantallen in via het groene kader. Dit is zichtbaar bij volgende afspraken van dezelfde klant.') +
 
     s('📋 Kanban bord') +
-    p('Het kanban bord toont alle keuringen in vier kolommen:') +
     li([
-      '<strong>Intake</strong> — net binnengekomen, nog niet opgepakt',
-      '<strong>In behandeling</strong> — wordt aan gewerkt',
-      '<strong>Klaar</strong> — klaar voor aflevering',
-      '<strong>Afgeleverd</strong> — afgerond',
+      '<strong>Intake → In behandeling → Klaar → Afgeleverd</strong>',
+      'Keuringen mét afleverdatum staan bovenaan (vroegste eerst). Zonder datum: op volgorde van binnenkomst.',
     ]) +
-    p('Volgorde: keuringen <em>met</em> afleverdatum staan bovenaan (vroegste eerst). Keuringen <em>zonder</em> datum staan op volgorde van binnenkomst — wie het eerst komt, wordt het eerst geholpen.') +
 
-    s('📅 Kalender & capaciteit') +
-    p('De kalender toont per dag hoeveel keuringsuren beschikbaar zijn en hoeveel er al ingepland is. Klik op een dag om tijden aan te passen of iemand vrij te zetten. Geef bij een uurwijziging altijd de reden op (vakantie, verlof, ziek of roosterwijziging) — dit wordt gebruikt voor het vakantiesaldo.') +
+    s('📅 Kalender') +
+    li([
+      'De <strong>capaciteitsbalk</strong> bovenin toont per dag de geplande keuringen (blauw = ingepland, grijs = wachtlijst, groen = vrij). Klik een segment om die keuring te openen.',
+      'Personeelsbalken eronder tonen wie er die dag is. Klik op een naam om een <strong>losse afspraak</strong> in te plannen (bijv. NKB, leverancier, overleg).',
+      'Klik op de dag zelf om tijden aan te passen, iemand vrij te zetten, of iemand <strong>extra toe te voegen</strong> voor die dag.',
+      'Losse afspraken buiten normale werktijden? De balk rekt automatisch mee.',
+    ]) +
+
+    s('📆 Losse afspraken plannen') +
+    li([
+      'Klik op een naam in de personeelsbalk → vul titel, type, tijden en opmerkingen in.',
+      'De afspraak verschijnt als gekleurd blok in de balk van die persoon.',
+      'Afspraakuren worden automatisch afgetrokken van de keurmeestercapaciteit van die dag.',
+    ]) +
+
+    s('👤 ZZP\'ers & extra medewerkers') +
+    li([
+      'Markeer een medewerker als <strong>ZZP\'er</strong> via Personeel → bewerken. ZZP\'ers staan niet standaard ingepland.',
+      'Voeg ze per dag toe via <strong>klik op de dag → "Toevoegen voor deze dag"</strong>.',
+    ]) +
 
     s('🏖️ Afwezigheid & vakantiesaldo') +
     li([
-      'Klik op <strong>🏖️ Afwezigheid</strong> voor hele periodes (vakantie, ziekte, verlof).',
-      'Voor een paar uur: pas de tijden aan via de kalender en kies de reden.',
-      'Het <strong>🏖️ Uren</strong> tabblad toont per medewerker hoeveel vakantie-uren zijn opgenomen en hoeveel er nog over zijn.',
-      'Vakantie-uren per jaar stel je in via <strong>👥 Personeel → medewerker bewerken</strong>.',
+      'Hele periodes: klik op <strong>🏖️ Afwezigheid</strong>.',
+      'Paar uur: pas tijden aan via de kalender en geef de reden op.',
+      'Saldo bekijken: tabblad <strong>🏖️ Uren</strong>. Vakantie-uren per jaar instellen via Personeel → medewerker bewerken.',
     ]) +
 
     s('👥 Personeel') +
-    p('Voeg medewerkers toe, stel hun weekrooster in en geef aan of ze keurmeester zijn. Keurmeesters tellen mee in de dagcapaciteit.') +
+    p('Voeg medewerkers toe, stel weekrooster in en geef aan of ze keurmeester zijn. Keurmeesters tellen mee in de dagcapaciteit.') +
 
     s('⚙️ Instellingen') +
     li([
-      'Stel een <strong>wachtwoord</strong> in zodat alleen collega\'s bij de app kunnen.',
-      'Vergeten? Klik op "Wachtwoord vergeten?" op het inlogscherm.',
+      'Stel een <strong>wachtwoord</strong> in. Vergeten? Klik "Wachtwoord vergeten?" op het inlogscherm.',
       'Voeg set-types of ruimtes toe die bij jullie situatie passen.',
+      '<strong>iCal export</strong>: download een .ics bestand met alle afspraken en keuringen, importeerbaar in Google Agenda, Outlook of Apple Agenda.',
     ]) +
 
-    s('📱 App installeren op telefoon of computer') +
-    p('Op telefoon (Chrome/Safari): open de app via de browser, tik op <strong>Delen → Zet op beginscherm</strong>. Op computer (Chrome): klik op het installeer-icoon rechts in de adresbalk.') +
+    s('📱 App installeren') +
+    p('Telefoon: open in browser → tik <strong>Delen → Zet op beginscherm</strong>. Computer (Chrome): klik het installeer-icoon rechts in de adresbalk.') +
 
     '</div>';
   openModal(html, true);
