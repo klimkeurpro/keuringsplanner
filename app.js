@@ -1261,6 +1261,50 @@ function openSettingsModal() {
     ruimtes: state.settings.ruimtes.slice(), wachtwoord: state.settings.wachtwoord || '', email: state.settings.email || '' };
   renderSettingsModal();
 }
+function exportIcal() {
+  function fmtDT(date, time) {
+    var t = (time || '09:00').replace(':', '');
+    return date.replace(/-/g, '') + 'T' + t + '00';
+  }
+  function esc(s) {
+    return (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  }
+  var lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//KeuringsPlanner//NL',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:KeuringsPlanner',
+  ];
+  state.afspraken.forEach(function(ap) {
+    var p = state.personeel.find(function(x) { return x.id === ap.persoon_id; });
+    var titel = (p ? p.naam + ' - ' : '') + ap.titel;
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:afspraak-' + ap.id + '@keuringsplanner');
+    lines.push('DTSTART;TZID=Europe/Amsterdam:' + fmtDT(ap.datum, ap.start_tijd));
+    lines.push('DTEND;TZID=Europe/Amsterdam:' + fmtDT(ap.datum, ap.eind_tijd));
+    lines.push('SUMMARY:' + esc(titel));
+    if (ap.opmerkingen) lines.push('DESCRIPTION:' + esc(ap.opmerkingen));
+    lines.push('END:VEVENT');
+  });
+  state.jobs.filter(function(j) { return j.heeftAfspraak && j.afspraakDatum; }).forEach(function(job) {
+    var startMin = Math.round(timeToHours(job.afspraakTijd || '09:00') * 60);
+    var endMin = startMin + Math.round((job.geschatteUren || 1) * 60);
+    var endTijd = String(Math.floor(endMin / 60)).padStart(2, '0') + ':' + String(endMin % 60).padStart(2, '0');
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:keuring-' + job.id + '@keuringsplanner');
+    lines.push('DTSTART;TZID=Europe/Amsterdam:' + fmtDT(job.afspraakDatum, job.afspraakTijd || '09:00'));
+    lines.push('DTEND;TZID=Europe/Amsterdam:' + fmtDT(job.afspraakDatum, endTijd));
+    lines.push('SUMMARY:Keuring: ' + esc(job.klant));
+    if (job.omschrijving) lines.push('DESCRIPTION:' + esc(job.omschrijving));
+    lines.push('END:VEVENT');
+  });
+  lines.push('END:VCALENDAR');
+  var blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'keuringsplanner.ics'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Kalender gedownload ✓');
+}
+
 function renderSettingsModal() {
   var f = window._settingsForm;
   var html = '<div class="modal-header"><h2>⚙️ Instellingen</h2><button class="btn-close" onclick="closeModal()">✕</button></div><div class="modal-body">' +
@@ -1278,7 +1322,10 @@ function renderSettingsModal() {
     '<div class="field"><label>E-mailadres beheerder</label>' +
     '<input type="email" class="input" id="set-email" value="' + escHtml(f.email || '') + '" placeholder="info@bedrijf.nl" /></div>' +
     '<div class="field"><label>Wachtwoord (leeg = geen wachtwoord' + (f.wachtwoord ? ', huidig wachtwoord blijft als leeg gelaten' : '') + ')</label>' +
-    '<input type="password" class="input" id="set-wachtwoord" value="" placeholder="' + (f.wachtwoord ? 'Nieuw wachtwoord (leeg = ongewijzigd)' : 'Stel een wachtwoord in...') + '" /></div></div></div></div>' +
+    '<input type="password" class="input" id="set-wachtwoord" value="" placeholder="' + (f.wachtwoord ? 'Nieuw wachtwoord (leeg = ongewijzigd)' : 'Stel een wachtwoord in...') + '" /></div></div></div>' +
+    '<div class="form-section"><div class="section-title">📅 Google Agenda / iCal</div>' +
+    '<p style="font-size:12px;color:var(--text-faint);margin:0 0 8px">Download een .ics bestand met alle afspraken en keuringen. Importeer dit in Google Agenda, Outlook of Apple Agenda.</p>' +
+    '<button class="btn-secondary full-width" onclick="exportIcal()">⬇ Download kalender (.ics)</button></div></div>' +
     '<div class="modal-footer"><button class="btn-primary full-width" onclick="saveSettingsModal()">✓ Alles opslaan</button></div>';
   var existing = document.querySelector('.modal-overlay');
   if (existing) existing.querySelector('.modal-content').innerHTML = html;
