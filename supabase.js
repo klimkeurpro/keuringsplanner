@@ -143,7 +143,7 @@ async function fetchPersoneel() {
 }
 
 async function savePersoneelslid(p) {
-  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null };
+  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, is_zzper: p.is_zzper || false, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null };
   if (p.id) {
     const { data, error } = await db.from('personeel').update(row).eq('id', p.id).select().single();
     if (error) { console.error('Fout bij opslaan personeelslid:', error); return null; }
@@ -212,6 +212,27 @@ async function fetchVakantieOverrides(jaar) {
   return data;
 }
 
+// ─── AFSPRAKEN ───
+
+async function fetchAfspraken(vanDatum, totDatum) {
+  const { data, error } = await db.from('afspraken').select('*').gte('datum', vanDatum).lte('datum', totDatum).order('datum').order('start_tijd');
+  if (error) { console.error('Fout bij ophalen afspraken:', error); return []; }
+  return data;
+}
+async function saveAfspraak(a) {
+  const row = { persoon_id: a.persoon_id, datum: a.datum, type: a.type || 'klant', titel: a.titel, start_tijd: a.start_tijd, eind_tijd: a.eind_tijd, opmerkingen: a.opmerkingen || '' };
+  if (a.id) {
+    const { data, error } = await db.from('afspraken').update(row).eq('id', a.id).select().single();
+    if (error) { console.error('Fout bij opslaan afspraak:', error); return null; }
+    return data;
+  } else {
+    const { data, error } = await db.from('afspraken').insert(row).select().single();
+    if (error) { console.error('Fout bij aanmaken afspraak:', error); return null; }
+    return data;
+  }
+}
+async function deleteAfspraak(id) { const { error } = await db.from('afspraken').delete().eq('id', id); return !error; }
+
 // ─── FOTO'S ───
 
 async function uploadFoto(klusId, file) {
@@ -249,4 +270,5 @@ function subscribeToChanges(onKlussenChange, onTodosChange, onInstellingenChange
   db.channel('personeel-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'personeel' }, () => onPersoneelChange()).subscribe();
   db.channel('afwezigheden-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'afwezigheden' }, () => onPersoneelChange()).subscribe();
   db.channel('dag-overrides-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'dag_overrides' }, () => onPersoneelChange()).subscribe();
+  db.channel('afspraken-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'afspraken' }, () => onPersoneelChange()).subscribe();
 }

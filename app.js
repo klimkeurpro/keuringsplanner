@@ -16,7 +16,7 @@ const STAFF_COLORS = ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899
 const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', anders: '📋 Anders' };
 
 let state = {
-  jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [],
+  jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [], afspraken: [],
   settings: {
     template: { ma: 8, di: 8, wo: 8, do: 8, vr: 8 },
     setTypes: [
@@ -90,9 +90,18 @@ function getStaffForDay(dateStr) {
   const dk = dayKey(dateStr); if (!dk) return [];
   return state.personeel.map(p => {
     const rooster = p.weekrooster && p.weekrooster[dk];
+    const ov = getDagOverrideForPerson(p.id, dateStr);
+    // ZZP'ers: only include if there's an explicit aanwezig:true override for this day
+    if (p.is_zzper) {
+      if (!ov || ov.aanwezig !== true) return null;
+      return { ...p, aanwezig: true,
+        start: (ov && ov.start_override) || '09:00',
+        eind: (ov && ov.eind_override) || '17:00',
+        keuringsuren: (ov && ov.keuringsuren_override != null) ? ov.keuringsuren_override : (p.is_keurmeester ? 4 : 0),
+      };
+    }
     if (!rooster || !rooster.actief) return null;
     if (isPersonAfwezig(p.id, dateStr)) return { ...p, aanwezig: false, reden: getAfwezigheidReden(p.id, dateStr), start: rooster.start, eind: rooster.eind, keuringsuren: 0 };
-    const ov = getDagOverrideForPerson(p.id, dateStr);
     return { ...p, aanwezig: ov ? ov.aanwezig !== false : true,
       start: (ov && ov.start_override) || rooster.start || '09:00',
       eind: (ov && ov.eind_override) || rooster.eind || '17:00',
@@ -100,6 +109,15 @@ function getStaffForDay(dateStr) {
     };
   }).filter(Boolean);
 }
+function getAfsprakenForPersonDay(persoonId, dateStr) {
+  return state.afspraken.filter(function(a) { return a.persoon_id === persoonId && a.datum === dateStr; });
+}
+function getTotalAfspraakHoursForDay(dateStr) {
+  return state.afspraken.filter(function(a) { return a.datum === dateStr; }).reduce(function(s, a) {
+    return s + Math.max(0, timeToHours(a.eind_tijd) - timeToHours(a.start_tijd));
+  }, 0);
+}
+
 function capacityForDay(dateStr) {
   const capOv = getCapOverrideForDay(dateStr);
   if (capOv && capOv.capaciteit_override != null) return capOv.capaciteit_override;
@@ -204,7 +222,8 @@ function renderCalendar() {
     '<span class="legend-item"><span class="legend-dot accent-bg"></span> Met afleverdatum</span>' +
     '<span class="legend-item"><span class="legend-dot muted-bg"></span> Wachtlijst</span>' +
     '<span class="legend-item"><span class="legend-dot free-bg"></span> Vrij</span>' +
-    '<span class="legend-sep">|</span><span class="legend-hint">Klik op dag = aanpassen</span></div>';
+    '<span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span> Afspraak</span>' +
+    '<span class="legend-sep">|</span><span class="legend-hint">Klik op dag = aanpassen · Klik op naam = afspraak plannen</span></div>';
 
   html += '<div class="cal-grid-outer">';
   html += '<div class="cal-header"><div class="cal-header-spacer"></div>' + DAY_NAMES_FULL.map(function(n) { return '<div class="cal-header-day">' + n + '</div>'; }).join('') + '</div>';
@@ -241,11 +260,13 @@ function renderCalendar() {
       var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
       var aHours = aItems.reduce(function(s, i) { return s + i.hours; }, 0);
       var tHours = tItems.reduce(function(s, i) { return s + i.hours; }, 0);
+      var apHours = getTotalAfspraakHoursForDay(dateStr);
       var aPct = entry.capacity > 0 ? Math.min((aHours / entry.capacity) * 100, 100) : 0;
       var tPct = entry.capacity > 0 ? Math.min((tHours / entry.capacity) * 100, 100 - aPct) : 0;
+      var apPct = entry.capacity > 0 ? Math.min((apHours / entry.capacity) * 100, 100 - aPct - tPct) : 0;
 
       html += '<div class="cal-day-content">';
-      html += '<div class="capacity-bar"><div class="cap-afspraak" style="width:' + aPct + '%"></div><div class="cap-tussendoor" style="width:' + tPct + '%"></div></div>';
+      html += '<div class="capacity-bar"><div class="cap-afspraak" style="width:' + aPct + '%"></div><div class="cap-tussendoor" style="width:' + tPct + '%"></div><div class="cap-losse-afspraak" style="width:' + apPct + '%"></div></div>';
       html += '<div class="cal-day-info ' + (isOver ? 'danger' : '') + '"><span>' + r2(entry.usedHours) + '/' + entry.capacity + 'u</span>';
       if (freeH > 0 && !isOver) html += '<span class="free">' + r2(freeH) + 'u vrij</span>';
       if (isOver) html += '<span class="over">OVER</span>';
@@ -266,8 +287,18 @@ function renderCalendar() {
           var heightPct = ((endH - startH) / totalHours) * 100;
           var leftPct = si * barW;
           html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + '12;border-color:' + s.kleur + '">';
-          html += '<span class="staff-bar-name" style="color:' + s.kleur + '">' + escHtml(s.naam) + '</span>';
+          html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" onclick="event.stopPropagation(); openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">' + escHtml(s.naam) + '</span>';
           if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u</span>';
+          // Afspraak blocks for this person on this day
+          var persAfspraken = getAfsprakenForPersonDay(s.id, dateStr);
+          persAfspraken.forEach(function(ap) {
+            var apStartH = timeToHours(ap.start_tijd) - HOUR_START;
+            var apEndH = timeToHours(ap.eind_tijd) - HOUR_START;
+            var apTopPct = (apStartH / (endH - startH)) * 100;
+            var apHeightPct = ((apEndH - apStartH) / (endH - startH)) * 100;
+            var apColor = ap.type === 'leverancier' ? 'var(--purple)' : ap.type === 'intern' ? 'var(--success)' : 'var(--accent)';
+            html += '<div class="afspraak-blok" style="top:' + apTopPct + '%;height:' + apHeightPct + '%;background:' + apColor + '" title="' + escHtml(ap.opmerkingen || ap.titel) + '" onclick="event.stopPropagation(); openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
+          });
           html += '</div>';
         });
         html += '</div>';
@@ -320,7 +351,7 @@ function renderKanban() {
         (status === 'afgeleverd' ? '<button class="btn-sm btn-archive" onclick="doArchiveerKlus(' + job.id + ')">📁 Archiveer</button>' : '') +
         '<button class="btn-sm btn-delete" onclick="doDeleteJob(' + job.id + ')">🗑</button></div></div>';
     });
-    if (col.length === 0) html += '<div class="kanban-empty">Geen klussen</div>';
+    if (col.length === 0) html += '<div class="kanban-empty">Geen keuringen</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -369,8 +400,8 @@ function renderArchief() {
   var z = state.archiefZoek.toLowerCase();
   var results = state.archief.filter(function(k) { return !z || k.klant.toLowerCase().indexOf(z) >= 0 || (k.klantNummer || '').toLowerCase().indexOf(z) >= 0 || k.omschrijving.toLowerCase().indexOf(z) >= 0; });
   var html = '<div class="archief-search"><input type="text" class="input" placeholder="Zoek op klantnaam, nummer of omschrijving..." value="' + escHtml(state.archiefZoek) + '" oninput="state.archiefZoek = this.value; render();" />' +
-    '<span class="archief-count">' + results.length + ' klus' + (results.length !== 1 ? 'sen' : '') + ' in archief</span></div>';
-  if (results.length === 0) html += '<div class="empty-state">Geen gearchiveerde klussen' + (z ? ' gevonden' : '') + '</div>';
+    '<span class="archief-count">' + results.length + ' keuring' + (results.length !== 1 ? 'en' : '') + ' in archief</span></div>';
+  if (results.length === 0) html += '<div class="empty-state">Geen gearchiveerde keuringen' + (z ? ' gevonden' : '') + '</div>';
   else results.forEach(function(job) {
     html += '<div class="archief-card" onclick="openJobModal(' + job.id + ', true)"><div class="archief-card-left">' +
       '<div class="archief-card-name">' + escHtml(job.klant) + '</div><div class="archief-card-desc">' + escHtml(job.omschrijving) + '</div>' +
@@ -413,7 +444,7 @@ function render() {
     '<button class="btn-header" onclick="openAfwezigheidModal()">🏖️ Afwezigheid</button>' +
     '<button class="btn-header" onclick="openSettingsModal()">⚙️ Instellingen</button>' +
     '<button class="btn-header" onclick="openHandleiding()" title="Handleiding">❓</button>' +
-    '<button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe klus</button>' +
+    '<button class="btn-new-job" onclick="openJobModal(null)">+ Nieuwe keuring</button>' +
     '</div></div></header>' +
     '<main class="main">' + (showStats ? renderStatsBar() : '') +
     '<div class="tab-bar-row"><div class="tab-bar">' + tabBarHtml + '</div>' + weekPicker + '</div>' +
@@ -459,28 +490,28 @@ function openHandleiding() {
   var html = '<div class="modal-header"><h2>❓ Handleiding KeuringsPlanner</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
     '<div class="modal-body">' +
 
-    s('📥 Nieuwe klus aanmaken') +
-    p('Klik rechtsboven op <strong>+ Nieuwe klus</strong>.') +
+    s('📥 Nieuwe keuring aanmaken') +
+    p('Klik rechtsboven op <strong>+ Nieuwe keuring</strong>.') +
     li([
       'Typ de klantnaam — bekende klanten verschijnen automatisch in een lijst. Klik erop om naam, klantnummer en telefoon in te vullen.',
       'Bij een terugkerende klant zie je een blauw kader met eerdere bezoeken en aantallen.',
-      'Gebruik <strong>"↩ Gebruik als basis"</strong> om een nieuwe klus voor te vullen met de aantallen van het vorige bezoek.',
+      'Gebruik <strong>"↩ Gebruik als basis"</strong> om een nieuwe keuring voor te vullen met de aantallen van het vorige bezoek.',
       'Vul de <strong>afgesproken sets</strong> in per type. De uren worden automatisch berekend.',
-      'Heb je een afleverdatum? Vul die in — de klus krijgt dan automatisch voorrang in de planning.',
+      'Heb je een afleverdatum? Vul die in — de keuring krijgt dan automatisch voorrang in de planning.',
     ]) +
 
     s('✅ Werkelijk ontvangen sets') +
-    p('Zodra een klus binnenkomt en je ziet hoeveel sets er echt zijn, vul je dit in via <strong>Klus bewerken → Werkelijk ontvangen sets</strong> (groen kader). Dit aantal is zichtbaar in de historiek bij volgende afspraken.') +
+    p('Zodra een keuring binnenkomt en je ziet hoeveel sets er echt zijn, vul je dit in via <strong>Keuring bewerken → Werkelijk ontvangen sets</strong> (groen kader). Dit aantal is zichtbaar in de historiek bij volgende afspraken.') +
 
     s('📋 Kanban bord') +
-    p('Het kanban bord toont alle klussen in vier kolommen:') +
+    p('Het kanban bord toont alle keuringen in vier kolommen:') +
     li([
       '<strong>Intake</strong> — net binnengekomen, nog niet opgepakt',
       '<strong>In behandeling</strong> — wordt aan gewerkt',
       '<strong>Klaar</strong> — klaar voor aflevering',
       '<strong>Afgeleverd</strong> — afgerond',
     ]) +
-    p('Volgorde: klussen <em>met</em> afleverdatum staan bovenaan (vroegste eerst). Klussen <em>zonder</em> datum staan op volgorde van binnenkomst — wie het eerst komt, wordt het eerst geholpen.') +
+    p('Volgorde: keuringen <em>met</em> afleverdatum staan bovenaan (vroegste eerst). Keuringen <em>zonder</em> datum staan op volgorde van binnenkomst — wie het eerst komt, wordt het eerst geholpen.') +
 
     s('📅 Kalender & capaciteit') +
     p('De kalender toont per dag hoeveel keuringsuren beschikbaar zijn en hoeveel er al ingepland is. Klik op een dag om tijden aan te passen of iemand vrij te zetten. Geef bij een uurwijziging altijd de reden op (vakantie, verlof, ziek of roosterwijziging) — dit wordt gebruikt voor het vakantiesaldo.') +
@@ -544,21 +575,21 @@ async function changeJobStatus(id, newStatus) {
   job.status = newStatus; render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
 }
 async function doDeleteJob(id) {
-  if (!confirm('Weet je zeker dat je deze klus wilt verwijderen?')) return;
-  if (await deleteKlus(id)) { state.jobs = state.jobs.filter(function(j) { return j.id !== id; }); render(); showToast('Klus verwijderd'); }
+  if (!confirm('Weet je zeker dat je deze keuring wilt verwijderen?')) return;
+  if (await deleteKlus(id)) { state.jobs = state.jobs.filter(function(j) { return j.id !== id; }); render(); showToast('Keuring verwijderd'); }
 }
 async function doArchiveerKlus(id) {
   if (await archiveerKlus(id)) {
     var job = state.jobs.find(function(j) { return j.id === id; });
     if (job) { job.gearchiveerd = true; state.jobs = state.jobs.filter(function(j) { return j.id !== id; }); state.archief.unshift(job); }
-    render(); showToast('Klus gearchiveerd 📁');
+    render(); showToast('Keuring gearchiveerd 📁');
   }
 }
 async function doDeArchiveer(id) {
   if (await deArchiveerKlus(id)) {
     var job = state.archief.find(function(j) { return j.id === id; });
     if (job) { job.gearchiveerd = false; job.status = 'intake'; state.archief = state.archief.filter(function(j) { return j.id !== id; }); state.jobs.push(job); }
-    render(); showToast('Klus teruggezet naar Intake');
+    render(); showToast('Keuring teruggezet naar Intake');
   }
 }
 async function toggleTodo(id, klaar) {
@@ -607,6 +638,26 @@ function openDayOverride(dateStr) {
     }
     html += '</div>';
   });
+  // ZZP'ers section
+  var zzpers = state.personeel.filter(function(p) { return p.is_zzper; });
+  if (zzpers.length > 0) {
+    html += '</div><div class="form-section"><div class="section-title">🔑 ZZP\'ers</div>' +
+      '<div class="hint-text">ZZP\'ers zijn standaard niet ingepland. Klik op "Inplannen" om ze voor deze dag toe te voegen.</div>';
+    zzpers.forEach(function(p) {
+      var ov = getDagOverrideForPerson(p.id, dateStr);
+      var isIngepland = ov && ov.aanwezig === true;
+      if (!isIngepland) {
+        html += '<div class="staff-day-row"><div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
+          '<span class="staff-day-name">' + escHtml(p.naam) + (p.is_keurmeester ? ' 🔧' : '') + '</span>' +
+          '<button class="btn-sm btn-accent" onclick="enableZzperForDay(\'' + dateStr + '\',' + p.id + ')">📥 Inplannen</button></div>';
+      } else {
+        html += '<div class="staff-day-row"><div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
+          '<span class="staff-day-name">' + escHtml(p.naam) + (p.is_keurmeester ? ' 🔧' : '') + '</span>' +
+          '<span class="badge badge-override">ingepland</span>' +
+          '<button class="btn-icon" title="Verwijderen" onclick="undoDayPersonAbsent(\'' + dateStr + '\',' + p.id + ')">✕</button></div>';
+      }
+    });
+  }
   html += '</div><div class="form-section"><div class="section-title">📊 Capaciteit</div>' +
     '<div class="field-row center"><span class="filter-label">Berekend: ' + cap + 'u</span><span class="filter-label">|</span>' +
     '<span class="filter-label">Overschrijven:</span>' +
@@ -660,6 +711,16 @@ async function undoDayPersonAbsent(dateStr, persoonId) {
   await reloadDagOverrides(); closeModal(); render();
   openDayOverride(dateStr); showToast('Weer aanwezig');
 }
+async function enableZzperForDay(dateStr, persoonId) {
+  var p = state.personeel.find(function(x) { return x.id === persoonId; });
+  await saveDagOverride({
+    datum: dateStr, persoon_id: persoonId, aanwezig: true,
+    start_override: '09:00', eind_override: '17:00',
+    keuringsuren_override: (p && p.is_keurmeester) ? 4 : 0
+  });
+  await reloadDagOverrides(); closeModal(); render();
+  openDayOverride(dateStr); showToast(((p && p.naam) || 'ZZP\'er') + ' ingepland voor deze dag');
+}
 async function saveDayCapOverride(dateStr) {
   var val = (document.getElementById('day-cap-input') || {}).value;
   if (val === '' || val === undefined) { closeModal(); return; }
@@ -669,6 +730,71 @@ async function saveDayCapOverride(dateStr) {
 async function resetDayCapOverride(id) {
   await deleteDagOverride(id);
   await reloadDagOverrides(); closeModal(); render(); showToast('Teruggezet naar berekend');
+}
+
+// Afspraak Modal
+function openAfspraakModal(persoonId, dateStr, afspraakId) {
+  var afspraak = afspraakId ? state.afspraken.find(function(a) { return a.id === afspraakId; }) : null;
+  var isNew = !afspraak;
+  var now = new Date();
+  var hh = String(now.getHours()).padStart(2, '0');
+  var mm = String(now.getMinutes()).padStart(2, '0');
+  var defaultStart = hh + ':' + mm;
+  var defaultEindH = String((now.getHours() + 1) % 24).padStart(2, '0');
+  var defaultEind = defaultEindH + ':' + mm;
+
+  var persoonOpties = state.personeel.map(function(p) {
+    var sel = (afspraak ? afspraak.persoon_id : persoonId) === p.id ? ' selected' : '';
+    return '<option value="' + p.id + '"' + sel + '>' + escHtml(p.naam) + '</option>';
+  }).join('');
+
+  var typeOpties = [['klant', '🤝 Klant'], ['leverancier', '🚚 Leverancier'], ['intern', '🏢 Intern']].map(function(t) {
+    var sel = (afspraak ? afspraak.type : 'klant') === t[0] ? ' selected' : '';
+    return '<option value="' + t[0] + '"' + sel + '>' + t[1] + '</option>';
+  }).join('');
+
+  var html = '<div class="modal-header"><h2>' + (isNew ? '📅 Nieuwe afspraak' : '✏️ Afspraak bewerken') + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="form-section">' +
+    '<div class="form-grid-2"><div class="field"><label>Persoon</label><select class="input" id="af2-persoon">' + persoonOpties + '</select></div>' +
+    '<div class="field"><label>Type</label><select class="input" id="af2-type">' + typeOpties + '</select></div></div>' +
+    '<div class="field"><label>Datum</label><input type="date" class="input" id="af2-datum" value="' + (afspraak ? afspraak.datum : (dateStr || todayStr())) + '" /></div>' +
+    '<div class="field"><label>Titel *</label><input class="input" id="af2-titel" value="' + escHtml(afspraak ? afspraak.titel : '') + '" placeholder="Bijv. Klantbezoek, Leveranciersgesprek..." /></div>' +
+    '<div class="form-grid-2"><div class="field"><label>Begintijd</label><input type="time" class="input" id="af2-start" value="' + (afspraak ? afspraak.start_tijd : defaultStart) + '" /></div>' +
+    '<div class="field"><label>Eindtijd</label><input type="time" class="input" id="af2-eind" value="' + (afspraak ? afspraak.eind_tijd : defaultEind) + '" /></div></div>' +
+    '<div class="field"><label>Opmerkingen</label><textarea class="input textarea" id="af2-opmerking" placeholder="Optionele toelichting...">' + escHtml(afspraak ? afspraak.opmerkingen : '') + '</textarea></div>' +
+    '</div></div>' +
+    '<div class="modal-footer"><button class="btn-primary" onclick="submitAfspraak(' + (afspraak ? afspraak.id : 'null') + ')">✓ ' + (isNew ? 'Opslaan' : 'Bijwerken') + '</button>' +
+    (!isNew ? '<button class="btn-sm btn-delete" onclick="doDeleteAfspraak(' + afspraak.id + ')">🗑 Verwijderen</button>' : '') + '</div>';
+  openModal(html);
+}
+
+async function submitAfspraak(editId) {
+  var persoonId = parseInt((document.getElementById('af2-persoon') || {}).value);
+  var type = (document.getElementById('af2-type') || {}).value || 'klant';
+  var datum = (document.getElementById('af2-datum') || {}).value;
+  var titel = ((document.getElementById('af2-titel') || {}).value || '').trim();
+  var start = (document.getElementById('af2-start') || {}).value;
+  var eind = (document.getElementById('af2-eind') || {}).value;
+  var opmerkingen = (document.getElementById('af2-opmerking') || {}).value || '';
+  if (!titel) { showToast('Titel is verplicht!', 'error'); return; }
+  if (!datum) { showToast('Datum is verplicht!', 'error'); return; }
+  var a = { persoon_id: persoonId, datum: datum, type: type, titel: titel, start_tijd: start, eind_tijd: eind, opmerkingen: opmerkingen };
+  if (editId) a.id = editId;
+  var saved = await saveAfspraak(a);
+  if (saved) {
+    if (editId) state.afspraken = state.afspraken.map(function(x) { return x.id === editId ? saved : x; });
+    else state.afspraken.push(saved);
+    closeModal(); render(); showToast('Afspraak opgeslagen ✓');
+  }
+}
+
+async function doDeleteAfspraak(id) {
+  if (!confirm('Weet je zeker dat je deze afspraak wilt verwijderen?')) return;
+  if (await deleteAfspraak(id)) {
+    state.afspraken = state.afspraken.filter(function(a) { return a.id !== id; });
+    closeModal(); render(); showToast('Afspraak verwijderd');
+  }
 }
 
 // Personeel Modal
@@ -726,6 +852,9 @@ function renderEditPersoneelForm() {
     '<div class="toggle-row" style="margin-top:8px" onclick="window._editPerson.is_keurmeester = !window._editPerson.is_keurmeester; renderEditPersoneelForm();">' +
     '<div class="toggle-switch ' + (p.is_keurmeester ? 'on' : '') + '"><div class="toggle-dot"></div></div>' +
     '<span class="toggle-label">' + (p.is_keurmeester ? '🔧 Keurmeester — draagt bij aan capaciteit' : 'Geen keurmeester') + '</span></div>' +
+    '<div class="toggle-row" style="margin-top:8px" onclick="window._editPerson.is_zzper = !window._editPerson.is_zzper; renderEditPersoneelForm();">' +
+    '<div class="toggle-switch ' + (p.is_zzper ? 'on' : '') + '"><div class="toggle-dot"></div></div>' +
+    '<span class="toggle-label">' + (p.is_zzper ? '🔑 ZZP\'er — standaard niet ingepland, per dag in te schakelen via de kalender' : 'Geen ZZP\'er') + '</span></div>' +
     '<div class="field" style="margin-top:10px"><label>🏖️ Vakantie-uren per jaar</label>' +
     '<div class="field-row compact"><input type="number" step="1" class="input-num" style="width:70px" value="' + (p.vakantie_uren_per_jaar || '') + '" placeholder="200" onchange="window._editPerson.vakantie_uren_per_jaar=parseFloat(this.value)||0" /><span class="unit">uur</span>' +
     '<span class="hint-text" style="margin-left:8px">bijv. 25 dagen × 8u = 200u</span></div></div></div>' +
@@ -875,9 +1004,9 @@ function renderJobModalContent(skipSync) {
       '<span class="contact-text">' + escHtml(entry.tekst) + '</span>' +
       '<button class="btn-icon" onclick="removeContactEntry(' + (form.contactLog.length - 1 - i) + ')">✕</button></div>';
   }).join('');
-  var deadlineHint = form.retourDatum ? '📅 Afleverdatum ingevuld → wordt ingepland met voorrang' : '💡 Vul een datum in als er een afspraak is — dan krijgt deze klus voorrang';
+  var deadlineHint = form.retourDatum ? '📅 Afleverdatum ingevuld → wordt ingepland met voorrang' : '💡 Vul een datum in als er een afspraak is — dan krijgt deze keuring voorrang';
 
-  var html = '<div class="modal-header"><h2>' + (isNew ? '📥 Nieuwe klus' : '✏️ Klus bewerken') + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
+  var html = '<div class="modal-header"><h2>' + (isNew ? '📥 Nieuwe keuring' : '✏️ Keuring bewerken') + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
     '<div class="modal-body job-form">' +
     '<div class="form-section"><div class="section-title">👤 Klantgegevens</div>' +
     '<div class="form-grid-2-1"><div class="field"><label>Klantnaam *</label>' +
@@ -1006,7 +1135,7 @@ async function submitJobForm() {
     if (window._modalIsNew) state.jobs.push(saved);
     else if (window._modalIsArchief) state.archief = state.archief.map(function(j) { return j.id === saved.id ? saved : j; });
     else state.jobs = state.jobs.map(function(j) { return j.id === saved.id ? saved : j; });
-    closeModal(); render(); showToast(window._modalIsNew ? 'Klus geregistreerd! ✓' : 'Klus opgeslagen ✓');
+    closeModal(); render(); showToast(window._modalIsNew ? 'Keuring geregistreerd! ✓' : 'Keuring opgeslagen ✓');
   }
 }
 
@@ -1110,7 +1239,10 @@ async function saveSettingsModal() {
 async function reloadDagOverrides() {
   var startMonday = getMondayOfWeek(todayStr());
   var endDate = new Date(startMonday); endDate.setDate(endDate.getDate() + state.weeksToShow * 7);
-  state.dagOverrides = await fetchDagOverrides(startMonday, toDateStr(endDate));
+  var endDateStr = toDateStr(endDate);
+  var results = await Promise.all([fetchDagOverrides(startMonday, endDateStr), fetchAfspraken(startMonday, endDateStr)]);
+  state.dagOverrides = results[0];
+  state.afspraken = results[1];
 }
 
 // === KLANT AUTOCOMPLETE & HISTORIEK ===
