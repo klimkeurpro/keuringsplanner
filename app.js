@@ -219,11 +219,11 @@ function renderCalendar() {
   var totalHours = HOUR_END - HOUR_START;
 
   var html = '<div class="cal-legend">' +
-    '<span class="legend-item"><span class="legend-dot accent-bg"></span> Met afleverdatum</span>' +
+    '<span class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span> Keuring (met datum)</span>' +
     '<span class="legend-item"><span class="legend-dot muted-bg"></span> Wachtlijst</span>' +
-    '<span class="legend-item"><span class="legend-dot free-bg"></span> Vrij</span>' +
-    '<span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span> Afspraak</span>' +
-    '<span class="legend-sep">|</span><span class="legend-hint">Klik op dag = aanpassen · Klik op naam = afspraak plannen</span></div>';
+    '<span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Vrij</span>' +
+    '<span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span> Losse afspraak</span>' +
+    '<span class="legend-sep">|</span><span class="legend-hint">Klik op naam in balk → afspraak plannen</span></div>';
 
   html += '<div class="cal-grid-outer">';
   html += '<div class="cal-header"><div class="cal-header-spacer"></div>' + DAY_NAMES_FULL.map(function(n) { return '<div class="cal-header-day">' + n + '</div>'; }).join('') + '</div>';
@@ -240,13 +240,14 @@ function renderCalendar() {
       var isToday = dateStr === today;
       var isPast = dateStr < today;
       var isOver = entry.usedHours > entry.capacity;
-      var freeH = Math.max(0, entry.capacity - entry.usedHours);
       var date = parseDate(dateStr);
       var hasCapOverride = getCapOverrideForDay(dateStr) && getCapOverrideForDay(dateStr).capaciteit_override != null;
       var staffPresent = entry.staff.filter(function(s) { return s.aanwezig; });
       var staffAbsent = entry.staff.filter(function(s) { return !s.aanwezig; });
 
       html += '<div class="cal-day ' + (isToday ? 'today' : '') + ' ' + (isPast ? 'past' : '') + '" onclick="openDayOverride(\'' + dateStr + '\')">';
+
+      // ─── Header ───
       html += '<div class="cal-day-header"><div class="cal-day-num"><span class="day-number">' + date.getDate() + '</span>';
       if (date.getDate() <= 7 || wi === 0) html += '<span class="day-month">' + date.toLocaleDateString('nl-NL', { month: 'short' }) + '</span>';
       html += '</div><div class="cal-day-badges">';
@@ -255,71 +256,107 @@ function renderCalendar() {
       if (staffAbsent.length > 0) html += '<span class="badge badge-absent">' + staffAbsent.length + '×afw</span>';
       html += '</div></div>';
 
-      // Capacity bar + pills (bovenin de cel)
+      // ─── Capaciteitssectie (boven de personeelsbalkjes) ───
       var aItems = entry.items.filter(function(it) { return it.type === 'afspraak'; });
       var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
-      var aHours = aItems.reduce(function(s, i) { return s + i.hours; }, 0);
-      var tHours = tItems.reduce(function(s, i) { return s + i.hours; }, 0);
       var apHours = getTotalAfspraakHoursForDay(dateStr);
-      var aPct = entry.capacity > 0 ? Math.min((aHours / entry.capacity) * 100, 100) : 0;
-      var tPct = entry.capacity > 0 ? Math.min((tHours / entry.capacity) * 100, 100 - aPct) : 0;
-      var apPct = entry.capacity > 0 ? Math.min((apHours / entry.capacity) * 100, 100 - aPct - tPct) : 0;
+      var totalUsed = entry.usedHours + apHours;
+      var freeH = Math.max(0, entry.capacity - totalUsed);
 
-      html += '<div class="cal-day-content">';
-      html += '<div class="capacity-bar"><div class="cap-afspraak" style="width:' + aPct + '%"></div><div class="cap-tussendoor" style="width:' + tPct + '%"></div><div class="cap-losse-afspraak" style="width:' + apPct + '%"></div></div>';
-      html += '<div class="cal-day-info ' + (isOver ? 'danger' : '') + '"><span>' + r2(entry.usedHours) + '/' + entry.capacity + 'u</span>';
-      if (freeH > 0 && !isOver) html += '<span class="free">' + r2(freeH) + 'u vrij</span>';
+      html += '<div class="cal-cap-section" onclick="event.stopPropagation()">';
+      html += '<div class="cap-bar-new">';
+
+      if (entry.capacity > 0) {
+        // Blauwe segmenten: keuringen met afsprakendatum
+        aItems.forEach(function(item) {
+          var pct = Math.min((item.hours / entry.capacity) * 100, 100);
+          if (pct < 0.5) return;
+          var cls = item.overflow ? 'cap-seg-overflow' : 'cap-seg-keuring';
+          var warning = item.overflow ? '⚠ ' : '';
+          html += '<div class="cap-seg ' + cls + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u" onclick="openJobModal(' + item.job.id + ')">' + warning + escHtml(item.job.klant) + '</div>';
+        });
+        // Grijze segmenten: wachtlijst keuringen
+        tItems.forEach(function(item) {
+          var pct = Math.min((item.hours / entry.capacity) * 100, 100);
+          if (pct < 0.5) return;
+          var daysOpen = workdaysBetween(item.job.datumBinnen || todayStr(), todayStr());
+          var isWarn = daysOpen >= WARNING_DAYS;
+          html += '<div class="cap-seg ' + (isWarn ? 'cap-seg-overflow' : 'cap-seg-wacht') + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (isWarn ? ' · ' + daysOpen + ' dagen open' : '') + '" onclick="openJobModal(' + item.job.id + ')">' + (isWarn ? '⚠ ' : '') + escHtml(item.job.klant) + '</div>';
+        });
+        // Oranje: losse afspraken
+        if (apHours > 0) {
+          var apPct = Math.min((apHours / entry.capacity) * 100, 100);
+          html += '<div class="cap-seg cap-seg-afspraak" style="width:' + apPct.toFixed(1) + '%" title="Afspraken: ' + r2(apHours) + 'u">afsp.</div>';
+        }
+        // Groen: vrij (neemt de rest)
+        if (freeH > 0) {
+          html += '<div class="cap-seg cap-seg-vrij" style="flex:1" title="' + r2(freeH) + 'u vrij">' + r2(freeH) + 'u vrij</div>';
+        }
+      } else {
+        html += '<div class="cap-seg cap-seg-vrij" style="flex:1">geen capaciteit</div>';
+      }
+
+      html += '</div>'; // cap-bar-new
+      html += '<div class="cal-day-info ' + (isOver ? 'danger' : '') + '"><span>' + r2(entry.usedHours) + '/' + entry.capacity + 'u keuringen</span>';
       if (isOver) html += '<span class="over">OVER</span>';
-      html += '</div><div class="cal-day-items">';
-      html += aItems.map(renderCalPill).join('');
-      if (aItems.length > 0 && tItems.length > 0) html += '<div class="pill-divider"></div>';
-      html += tItems.map(renderCalPill).join('');
-      html += '</div></div>';
+      html += '</div>';
+      html += '</div>'; // cal-cap-section
 
-      // Staff vertical bars (absolute background)
+      // ─── Personeelsbalkjes sectie ───
+      html += '<div class="cal-staff-area" onclick="event.stopPropagation()">';
       if (staffPresent.length > 0) {
         var barW = Math.floor(100 / staffPresent.length);
-        html += '<div class="staff-bars-bg">';
         staffPresent.forEach(function(s, si) {
           var startH = timeToHours(s.start) - HOUR_START;
           var endH = timeToHours(s.eind) - HOUR_START;
           var topPct = (startH / totalHours) * 100;
           var heightPct = ((endH - startH) / totalHours) * 100;
           var leftPct = si * barW;
+          var barDurH = endH - startH;
+
           html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + '12;border-color:' + s.kleur + '">';
-          html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" onclick="event.stopPropagation(); openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">' + escHtml(s.naam) + '</span>';
-          if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u</span>';
-          // Afspraak blocks for this person on this day
-          var persAfspraken = getAfsprakenForPersonDay(s.id, dateStr);
-          persAfspraken.forEach(function(ap) {
-            var apStartH = timeToHours(ap.start_tijd) - HOUR_START;
-            var apEndH = timeToHours(ap.eind_tijd) - HOUR_START;
-            var apTopPct = (apStartH / (endH - startH)) * 100;
-            var apHeightPct = ((apEndH - apStartH) / (endH - startH)) * 100;
-            var apColor = ap.type === 'leverancier' ? 'var(--purple)' : ap.type === 'intern' ? 'var(--success)' : 'var(--accent)';
-            html += '<div class="afspraak-blok" style="top:' + apTopPct + '%;height:' + apHeightPct + '%;background:' + apColor + '" title="' + escHtml(ap.opmerkingen || ap.titel) + '" onclick="event.stopPropagation(); openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
-          });
+          html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Klik om afspraak te plannen" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>';
+          if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u keur.</span>';
+
+          // Losse afspraak blokken
+          if (barDurH > 0) {
+            getAfsprakenForPersonDay(s.id, dateStr).forEach(function(ap) {
+              var apS = Math.max(0, timeToHours(ap.start_tijd) - timeToHours(s.start));
+              var apE = Math.min(barDurH, timeToHours(ap.eind_tijd) - timeToHours(s.start));
+              if (apE <= apS) return;
+              var apTop = (apS / barDurH) * 100;
+              var apH = ((apE - apS) / barDurH) * 100;
+              var apColor = ap.type === 'leverancier' ? 'var(--purple)' : ap.type === 'intern' ? 'var(--success)' : 'var(--warning)';
+              html += '<div class="afspraak-blok" style="top:' + apTop.toFixed(1) + '%;height:' + apH.toFixed(1) + '%;background:' + apColor + '" title="' + escHtml(ap.titel) + (ap.opmerkingen ? ': ' + escHtml(ap.opmerkingen) : '') + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
+            });
+
+            // Keuring blokken (voor keuringen die aan deze keurmeester zijn gekoppeld)
+            state.jobs.filter(function(j) {
+              return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr;
+            }).forEach(function(job) {
+              var kStart = job.afspraakTijd ? timeToHours(job.afspraakTijd) : timeToHours(s.start);
+              var kEnd = kStart + (job.geschatteUren || 1);
+              var kS = Math.max(0, kStart - timeToHours(s.start));
+              var kE = Math.min(barDurH, kEnd - timeToHours(s.start));
+              if (kE <= kS) return;
+              var kTop = (kS / barDurH) * 100;
+              var kH = ((kE - kS) / barDurH) * 100;
+              html += '<div class="keuring-blok" style="top:' + kTop.toFixed(1) + '%;height:' + kH.toFixed(1) + '%;background:' + s.kleur + '" title="Keuring: ' + escHtml(job.klant) + '" onclick="openJobModal(' + job.id + ')">' + escHtml(job.klant) + '</div>';
+            });
+          }
           html += '</div>';
         });
-        html += '</div>';
+      } else {
+        html += '<div class="staff-area-hint">geen personeel</div>';
       }
+      html += '</div>'; // cal-staff-area
 
-      html += '</div>';
+      html += '</div>'; // cal-day
     });
     html += '</div></div>';
   });
   html += '</div>';
   return html;
-}
-
-function renderCalPill(item) {
-  var job = item.job, hours = item.hours, type = item.type, overflow = item.overflow;
-  var daysOpen = workdaysBetween(job.datumBinnen || todayStr(), todayStr());
-  var isWarning = type === 'tussendoor' && daysOpen >= WARNING_DAYS;
-  var cls = overflow ? 'pill-overflow' : type === 'afspraak' ? 'pill-afspraak' : isWarning ? 'pill-warning' : 'pill-tussendoor';
-  return '<div class="cal-pill ' + cls + '" onclick="event.stopPropagation(); openJobModal(' + job.id + ')">' +
-    '<span class="pill-name">' + ((isWarning || overflow) ? '⚠ ' : '') + escHtml(job.klant) + '</span>' +
-    '<span class="pill-hours">' + r2(hours) + 'u</span></div>';
 }
 
 // Kanban
@@ -955,6 +992,7 @@ function syncFormToModal() {
   if (el('jf-afkeur-toel')) form.afkeurToelichting = el('jf-afkeur-toel').value;
   if (el('jf-status')) form.status = el('jf-status').value;
   if (el('jf-notities')) form.notities = el('jf-notities').value;
+  if (el('jf-persoon')) form.persoonId = el('jf-persoon').value ? parseInt(el('jf-persoon').value) : null;
   form.heeftAfspraak = !!(form.retourDatum);
   form.afspraakDatum = form.retourDatum || '';
   form.afspraakTijd = form.retourTijd || '';
@@ -1033,7 +1071,17 @@ function renderJobModalContent(skipSync) {
     '<div class="form-grid-2"><input type="date" class="input" id="jf-binn-datum" value="' + (form.binnenkomstDatum || '') + '" /><input type="time" class="input" id="jf-binn-tijd" value="' + (form.binnenkomstTijd || '') + '" /></div></div>' +
     '<div><div class="sub-label">AFLEVERING KLANT</div><input class="input mb-4" id="jf-ret-wijze" value="' + escHtml(form.retourWijze) + '" placeholder="Klant haalt op, post, wij brengen..." />' +
     '<div class="form-grid-2"><input type="date" class="input" id="jf-ret-datum" value="' + (form.retourDatum || '') + '" /><input type="time" class="input" id="jf-ret-tijd" value="' + (form.retourTijd || '') + '" /></div>' +
-    '<div class="deadline-hint">' + deadlineHint + '</div></div></div></div>';
+    '<div class="deadline-hint">' + deadlineHint + '</div></div></div>' +
+    (state.personeel.filter(function(p){return p.is_keurmeester;}).length > 0
+      ? '<div class="field" style="margin-top:8px"><label>🔧 Toegewezen keurmeester (optioneel)</label>' +
+        '<select class="input" id="jf-persoon">' +
+        '<option value="">— Niet toegewezen</option>' +
+        state.personeel.filter(function(p){return p.is_keurmeester;}).map(function(p){
+          return '<option value="' + p.id + '"' + (form.persoonId === p.id ? ' selected' : '') + '>' + escHtml(p.naam) + '</option>';
+        }).join('') +
+        '</select><div class="hint-text" style="margin-top:4px">Wanneer gekoppeld verschijnt de keuring als blok in die keurmeester\'s tijdsbalk</div></div>'
+      : '') +
+    '</div>';
   if (!isNew) {
     html += '<div class="form-section"><div class="field"><label>Status</label><select class="input" id="jf-status">' + statusHtml + '</select></div></div>' +
       '<div class="form-section"><div class="section-title-row"><span class="section-title">📞 Klantcontact</span>' +
