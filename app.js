@@ -677,24 +677,24 @@ function openDayOverride(dateStr) {
     }
     html += '</div>';
   });
-  // ZZP'ers section
-  var zzpers = state.personeel.filter(function(p) { return p.is_zzper; });
-  if (zzpers.length > 0) {
-    html += '</div><div class="form-section"><div class="section-title">🔑 ZZP\'ers</div>' +
-      '<div class="hint-text">ZZP\'ers zijn standaard niet ingepland. Klik op "Inplannen" om ze voor deze dag toe te voegen.</div>';
-    zzpers.forEach(function(p) {
+  // Medewerkers die deze dag NIET ingepland staan (ZZP'ers + regulier niet in rooster)
+  var staffIds = staff.map(function(s) { return s.id; });
+  var nietIngepland = state.personeel.filter(function(p) { return staffIds.indexOf(p.id) === -1; });
+  if (nietIngepland.length > 0) {
+    html += '</div><div class="form-section"><div class="section-title">➕ Toevoegen voor deze dag</div>' +
+      '<div class="hint-text">Deze medewerkers staan niet in het rooster voor vandaag. Klik op "Toevoegen" om ze eenmalig in te plannen.</div>';
+    nietIngepland.forEach(function(p) {
       var ov = getDagOverrideForPerson(p.id, dateStr);
-      var isIngepland = ov && ov.aanwezig === true;
-      if (!isIngepland) {
-        html += '<div class="staff-day-row"><div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
-          '<span class="staff-day-name">' + escHtml(p.naam) + (p.is_keurmeester ? ' 🔧' : '') + '</span>' +
-          '<button class="btn-sm btn-accent" onclick="enableZzperForDay(\'' + dateStr + '\',' + p.id + ')">📥 Inplannen</button></div>';
+      var isToegevoegd = ov && ov.aanwezig === true;
+      html += '<div class="staff-day-row"><div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
+        '<span class="staff-day-name">' + escHtml(p.naam) + (p.is_keurmeester ? ' 🔧' : '') + (p.is_zzper ? ' 🔑' : '') + '</span>';
+      if (!isToegevoegd) {
+        html += '<button class="btn-sm btn-accent" onclick="enableZzperForDay(\'' + dateStr + '\',' + p.id + ')">📥 Toevoegen</button>';
       } else {
-        html += '<div class="staff-day-row"><div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
-          '<span class="staff-day-name">' + escHtml(p.naam) + (p.is_keurmeester ? ' 🔧' : '') + '</span>' +
-          '<span class="badge badge-override">ingepland</span>' +
-          '<button class="btn-icon" title="Verwijderen" onclick="undoDayPersonAbsent(\'' + dateStr + '\',' + p.id + ')">✕</button></div>';
+        html += '<span class="badge badge-override">toegevoegd</span>' +
+          '<button class="btn-icon" title="Verwijderen" onclick="undoDayPersonAbsent(\'' + dateStr + '\',' + p.id + ')">✕</button>';
       }
+      html += '</div>';
     });
   }
   html += '</div><div class="form-section"><div class="section-title">📊 Capaciteit</div>' +
@@ -752,13 +752,23 @@ async function undoDayPersonAbsent(dateStr, persoonId) {
 }
 async function enableZzperForDay(dateStr, persoonId) {
   var p = state.personeel.find(function(x) { return x.id === persoonId; });
+  // Gebruik standaard rooster-uren van een actieve dag, anders 09:00-17:00
+  var defaultStart = '09:00', defaultEind = '17:00', defaultKeur = p && p.is_keurmeester ? 4 : 0;
+  if (p && p.weekrooster) {
+    var activeDag = DAY_NAMES.find(function(d) { return p.weekrooster[d] && p.weekrooster[d].actief; });
+    if (activeDag) {
+      defaultStart = p.weekrooster[activeDag].start || '09:00';
+      defaultEind = p.weekrooster[activeDag].eind || '17:00';
+      defaultKeur = p.weekrooster[activeDag].keuringsuren != null ? p.weekrooster[activeDag].keuringsuren : defaultKeur;
+    }
+  }
   await saveDagOverride({
     datum: dateStr, persoon_id: persoonId, aanwezig: true,
-    start_override: '09:00', eind_override: '17:00',
-    keuringsuren_override: (p && p.is_keurmeester) ? 4 : 0
+    start_override: defaultStart, eind_override: defaultEind,
+    keuringsuren_override: defaultKeur
   });
   await reloadDagOverrides(); closeModal(); render();
-  openDayOverride(dateStr); showToast(((p && p.naam) || 'ZZP\'er') + ' ingepland voor deze dag');
+  openDayOverride(dateStr); showToast((p ? p.naam : 'Medewerker') + ' toegevoegd voor ' + formatDateShort(dateStr));
 }
 async function saveDayCapOverride(dateStr) {
   var val = (document.getElementById('day-cap-input') || {}).value;
