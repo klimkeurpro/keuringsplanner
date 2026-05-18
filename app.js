@@ -308,12 +308,24 @@ function renderCalendar() {
         staffPresent.forEach(function(s, si) {
           var startH = timeToHours(s.start) - HOUR_START;
           var endH = timeToHours(s.eind) - HOUR_START;
-          var topPct = (startH / totalHours) * 100;
-          var heightPct = ((endH - startH) / totalHours) * 100;
-          var leftPct = si * barW;
-          var barDurH = endH - startH;
           var persAfspraken = getAfsprakenForPersonDay(s.id, dateStr);
-          // Als er een afspraak in de balk staat: iets meer zichtbare achtergrond (minder transparant)
+
+          // Extend bar to cover afspraken that fall outside normal working hours
+          var effectiveStartH = persAfspraken.reduce(function(min, ap) {
+            return Math.min(min, timeToHours(ap.start_tijd) - HOUR_START);
+          }, startH);
+          var effectiveEndH = persAfspraken.reduce(function(max, ap) {
+            return Math.max(max, timeToHours(ap.eind_tijd) - HOUR_START);
+          }, endH);
+          effectiveStartH = Math.max(0, effectiveStartH);
+          effectiveEndH = Math.min(totalHours, effectiveEndH);
+
+          var topPct = (effectiveStartH / totalHours) * 100;
+          var heightPct = ((effectiveEndH - effectiveStartH) / totalHours) * 100;
+          var leftPct = si * barW;
+          var barDurH = effectiveEndH - effectiveStartH;
+          var effectiveStartTime = HOUR_START + effectiveStartH;
+
           var bgAlpha = persAfspraken.length > 0 ? '28' : '12';
 
           html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + bgAlpha + ';border-color:' + s.kleur + '">';
@@ -323,12 +335,11 @@ function renderCalendar() {
           // Losse afspraak blokken
           if (barDurH > 0) {
             persAfspraken.forEach(function(ap) {
-              var apS = Math.max(0, timeToHours(ap.start_tijd) - timeToHours(s.start));
-              var apE = Math.min(barDurH, timeToHours(ap.eind_tijd) - timeToHours(s.start));
+              var apS = Math.max(0, timeToHours(ap.start_tijd) - effectiveStartTime);
+              var apE = Math.min(barDurH, timeToHours(ap.eind_tijd) - effectiveStartTime);
               if (apE <= apS) return;
               var apTop = (apS / barDurH) * 100;
               var apH = ((apE - apS) / barDurH) * 100;
-              // Subtiele kleur: iets transparanter en gebaseerd op personeelskleur ipv oranje
               html += '<div class="afspraak-blok" style="top:' + apTop.toFixed(1) + '%;height:' + apH.toFixed(1) + '%;background:' + s.kleur + 'BB;border:1px solid ' + s.kleur + '" title="' + escHtml(ap.titel) + (ap.opmerkingen ? ': ' + escHtml(ap.opmerkingen) : '') + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
             });
 
@@ -336,10 +347,10 @@ function renderCalendar() {
             state.jobs.filter(function(j) {
               return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr;
             }).forEach(function(job) {
-              var kStart = job.afspraakTijd ? timeToHours(job.afspraakTijd) : timeToHours(s.start);
+              var kStart = job.afspraakTijd ? timeToHours(job.afspraakTijd) : effectiveStartTime;
               var kEnd = kStart + (job.geschatteUren || 1);
-              var kS = Math.max(0, kStart - timeToHours(s.start));
-              var kE = Math.min(barDurH, kEnd - timeToHours(s.start));
+              var kS = Math.max(0, kStart - effectiveStartTime);
+              var kE = Math.min(barDurH, kEnd - effectiveStartTime);
               if (kE <= kS) return;
               var kTop = (kS / barDurH) * 100;
               var kH = ((kE - kS) / barDurH) * 100;
