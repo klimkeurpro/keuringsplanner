@@ -126,7 +126,12 @@ function capacityForDay(dateStr) {
     const dk = dayKey(dateStr);
     return dk ? (state.settings.template[dk] || 0) : 0;
   }
-  return getStaffForDay(dateStr).filter(s => s.aanwezig && s.is_keurmeester).reduce((sum, s) => sum + (s.keuringsuren || 0), 0);
+  return getStaffForDay(dateStr).filter(s => s.aanwezig && s.is_keurmeester).reduce(function(sum, s) {
+    var afspraakUren = getAfsprakenForPersonDay(s.id, dateStr).reduce(function(t, a) {
+      return t + Math.max(0, timeToHours(a.eind_tijd) - timeToHours(a.start_tijd));
+    }, 0);
+    return sum + Math.max(0, (s.keuringsuren || 0) - afspraakUren);
+  }, 0);
 }
 
 // Calendar scheduling
@@ -257,11 +262,10 @@ function renderCalendar() {
       html += '</div></div>';
 
       // ─── Capaciteitssectie (boven de personeelsbalkjes) ───
+      // Alleen keuringen in de pil; afspraken verminderen al de capaciteit via capacityForDay()
       var aItems = entry.items.filter(function(it) { return it.type === 'afspraak'; });
       var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
-      var apHours = getTotalAfspraakHoursForDay(dateStr);
-      var totalUsed = entry.usedHours + apHours;
-      var freeH = Math.max(0, entry.capacity - totalUsed);
+      var freeH = Math.max(0, entry.capacity - entry.usedHours);
 
       html += '<div class="cal-cap-section" onclick="event.stopPropagation()">';
       html += '<div class="cap-bar-new">';
@@ -283,17 +287,12 @@ function renderCalendar() {
           var isWarn = daysOpen >= WARNING_DAYS;
           html += '<div class="cap-seg ' + (isWarn ? 'cap-seg-overflow' : 'cap-seg-wacht') + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (isWarn ? ' · ' + daysOpen + ' dagen open' : '') + '" onclick="openJobModal(' + item.job.id + ')">' + (isWarn ? '⚠ ' : '') + escHtml(item.job.klant) + '</div>';
         });
-        // Oranje: losse afspraken
-        if (apHours > 0) {
-          var apPct = Math.min((apHours / entry.capacity) * 100, 100);
-          html += '<div class="cap-seg cap-seg-afspraak" style="width:' + apPct.toFixed(1) + '%" title="Afspraken: ' + r2(apHours) + 'u">afsp.</div>';
-        }
-        // Groen: vrij (neemt de rest)
+        // Groen: vrij keuring-capaciteit
         if (freeH > 0) {
-          html += '<div class="cap-seg cap-seg-vrij" style="flex:1" title="' + r2(freeH) + 'u vrij">' + r2(freeH) + 'u vrij</div>';
+          html += '<div class="cap-seg cap-seg-vrij" style="flex:1" title="' + r2(freeH) + 'u vrij voor keuringen">' + r2(freeH) + 'u vrij</div>';
         }
       } else {
-        html += '<div class="cap-seg cap-seg-vrij" style="flex:1">geen capaciteit</div>';
+        html += '<div class="cap-seg cap-seg-vrij" style="flex:1">geen keur-capaciteit</div>';
       }
 
       html += '</div>'; // cap-bar-new
@@ -313,21 +312,24 @@ function renderCalendar() {
           var heightPct = ((endH - startH) / totalHours) * 100;
           var leftPct = si * barW;
           var barDurH = endH - startH;
+          var persAfspraken = getAfsprakenForPersonDay(s.id, dateStr);
+          // Als er een afspraak in de balk staat: iets meer zichtbare achtergrond (minder transparant)
+          var bgAlpha = persAfspraken.length > 0 ? '28' : '12';
 
-          html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + '12;border-color:' + s.kleur + '">';
+          html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + bgAlpha + ';border-color:' + s.kleur + '">';
           html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Klik om afspraak te plannen" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>';
           if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u keur.</span>';
 
           // Losse afspraak blokken
           if (barDurH > 0) {
-            getAfsprakenForPersonDay(s.id, dateStr).forEach(function(ap) {
+            persAfspraken.forEach(function(ap) {
               var apS = Math.max(0, timeToHours(ap.start_tijd) - timeToHours(s.start));
               var apE = Math.min(barDurH, timeToHours(ap.eind_tijd) - timeToHours(s.start));
               if (apE <= apS) return;
               var apTop = (apS / barDurH) * 100;
               var apH = ((apE - apS) / barDurH) * 100;
-              var apColor = ap.type === 'leverancier' ? 'var(--purple)' : ap.type === 'intern' ? 'var(--success)' : 'var(--warning)';
-              html += '<div class="afspraak-blok" style="top:' + apTop.toFixed(1) + '%;height:' + apH.toFixed(1) + '%;background:' + apColor + '" title="' + escHtml(ap.titel) + (ap.opmerkingen ? ': ' + escHtml(ap.opmerkingen) : '') + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
+              // Subtiele kleur: iets transparanter en gebaseerd op personeelskleur ipv oranje
+              html += '<div class="afspraak-blok" style="top:' + apTop.toFixed(1) + '%;height:' + apH.toFixed(1) + '%;background:' + s.kleur + 'BB;border:1px solid ' + s.kleur + '" title="' + escHtml(ap.titel) + (ap.opmerkingen ? ': ' + escHtml(ap.opmerkingen) : '') + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', ' + ap.id + ')">' + escHtml(ap.titel) + '</div>';
             });
 
             // Keuring blokken (voor keuringen die aan deze keurmeester zijn gekoppeld)
