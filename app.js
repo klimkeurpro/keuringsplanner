@@ -346,7 +346,8 @@ function renderCalendar() {
             state.jobs.filter(function(j) {
               return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr;
             }).forEach(function(job) {
-              var kStart = job.afspraakTijd ? timeToHours(job.afspraakTijd) : effectiveStartTime;
+              var kTijd = job.binnenkomstTijd || job.afspraakTijd || '';
+              var kStart = kTijd ? timeToHours(kTijd) : effectiveStartTime;
               var kEnd = kStart + (job.geschatteUren || 1);
               var kS = Math.max(0, kStart - effectiveStartTime);
               var kE = Math.min(barDurH, kEnd - effectiveStartTime);
@@ -1027,7 +1028,6 @@ function syncFormToModal() {
   if (el('jf-status')) form.status = el('jf-status').value;
   if (el('jf-notities')) form.notities = el('jf-notities').value;
   if (el('jf-persoon')) form.persoonId = el('jf-persoon').value ? parseInt(el('jf-persoon').value) : null;
-  if (el('jf-afspraak-tijd')) form.afspraakTijd = el('jf-afspraak-tijd').value;
   form.heeftAfspraak = !!(form.retourDatum);
   form.afspraakDatum = form.retourDatum || '';
   document.querySelectorAll('.set-type-input').forEach(function(inp) { form.aantallen[inp.dataset.typeId] = parseInt(inp.value) || 0; });
@@ -1108,15 +1108,12 @@ function renderJobModalContent(skipSync) {
     '<div class="deadline-hint">' + deadlineHint + '</div></div></div>' +
     (state.personeel.filter(function(p){return p.is_keurmeester;}).length > 0
       ? '<div class="field" style="margin-top:8px"><label>🔧 Toegewezen keurmeester (optioneel)</label>' +
-        '<div class="form-grid-2" style="margin-top:4px">' +
         '<select class="input" id="jf-persoon">' +
         '<option value="">— Niet toegewezen</option>' +
         state.personeel.filter(function(p){return p.is_keurmeester;}).map(function(p){
           return '<option value="' + p.id + '"' + (form.persoonId === p.id ? ' selected' : '') + '>' + escHtml(p.naam) + '</option>';
         }).join('') +
-        '</select>' +
-        '<input type="time" class="input" id="jf-afspraak-tijd" value="' + (form.afspraakTijd || '') + '" placeholder="Tijdstip" />' +
-        '</div><div class="hint-text" style="margin-top:4px">Wanneer gekoppeld verschijnt de keuring als blok op het juiste tijdstip in de tijdsbalk</div></div>'
+        '</select><div class="hint-text" style="margin-top:4px">Wanneer gekoppeld verschijnt de keuring als blok op de binnenkomsttijd in de tijdsbalk</div></div>'
       : '') +
     '</div>';
   if (!isNew) {
