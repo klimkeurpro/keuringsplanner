@@ -169,4 +169,7 @@ ALTER TABLE personeel ADD COLUMN IF NOT EXISTS vakantie_uren_per_jaar NUMERIC DE
 -- Voeg werkelijk ontvangen aantallen toe aan klussen
 ALTER TABLE klussen ADD COLUMN IF NOT EXISTS aantallen_werkelijk JSONB DEFAULT NULL;
 
+-- Voeg personen_ids toe aan afspraken (voor interne afspraken met meerdere personeelsleden)
+ALTER TABLE afspraken ADD COLUMN IF NOT EXISTS personen_ids JSONB DEFAULT NULL;
+
 -- ============================================
