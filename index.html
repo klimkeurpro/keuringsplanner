@@ -305,6 +305,13 @@
     .staff-day-badge.absent { background: var(--danger-light); color: var(--danger); }
     .hint-text { font-size: 11px; color: var(--text-faint); margin-bottom: 8px; font-style: italic; }
 
+    /* ─── Personen checkboxes (intern afspraken) ─── */
+    .personen-checkboxes { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+    .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500; padding: 5px 8px; border-radius: var(--radius); transition: background 0.1s; }
+    .checkbox-label:hover { background: var(--bg); }
+    .checkbox-label input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+    .person-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
     /* ─── Password Screen ─── */
     .password-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
     .password-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 32px; max-width: 360px; width: 100%; text-align: center; box-shadow: var(--shadow-lg); }

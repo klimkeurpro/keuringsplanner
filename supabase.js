@@ -222,7 +222,7 @@ async function fetchAfspraken(vanDatum, totDatum) {
   return data;
 }
 async function saveAfspraak(a) {
-  const row = { persoon_id: a.persoon_id, datum: a.datum, type: a.type || 'klant', titel: a.titel, start_tijd: a.start_tijd, eind_tijd: a.eind_tijd, opmerkingen: a.opmerkingen || '' };
+  const row = { persoon_id: a.persoon_id, datum: a.datum, type: a.type || 'klant', titel: a.titel, start_tijd: a.start_tijd, eind_tijd: a.eind_tijd, opmerkingen: a.opmerkingen || '', personen_ids: a.personen_ids || null };
   if (a.id) {
     const { data, error } = await db.from('afspraken').update(row).eq('id', a.id).select().single();
     if (error) { console.error('Fout bij opslaan afspraak:', error); return null; }

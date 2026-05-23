@@ -110,7 +110,12 @@ function getStaffForDay(dateStr) {
   }).filter(Boolean);
 }
 function getAfsprakenForPersonDay(persoonId, dateStr) {
-  return state.afspraken.filter(function(a) { return a.persoon_id === persoonId && a.datum === dateStr; });
+  return state.afspraken.filter(function(a) {
+    return a.datum === dateStr && (
+      a.persoon_id === persoonId ||
+      (Array.isArray(a.personen_ids) && a.personen_ids.includes(persoonId))
+    );
+  });
 }
 function getTotalAfspraakHoursForDay(dateStr) {
   return state.afspraken.filter(function(a) { return a.datum === dateStr; }).reduce(function(s, a) {
@@ -806,6 +811,35 @@ async function resetDayCapOverride(id) {
 }
 
 // Afspraak Modal
+function renderAfspraakPersonenField(type, persoonId, personen_ids) {
+  if (type === 'intern') {
+    var html = '<label>Personen (meerdere selecteerbaar)</label><div class="personen-checkboxes">';
+    state.personeel.forEach(function(p) {
+      var checked = (Array.isArray(personen_ids) && personen_ids.includes(p.id)) || (!personen_ids && p.id === persoonId) ? ' checked' : '';
+      html += '<label class="checkbox-label"><input type="checkbox" class="af2-persoon-check" value="' + p.id + '"' + checked + '><span class="person-dot" style="background:' + p.kleur + '"></span>' + escHtml(p.naam) + '</label>';
+    });
+    html += '</div>';
+    return html;
+  }
+  var opties = state.personeel.map(function(p) {
+    var sel = p.id === persoonId ? ' selected' : '';
+    return '<option value="' + p.id + '"' + sel + '>' + escHtml(p.naam) + '</option>';
+  }).join('');
+  return '<label>Persoon</label><select class="input" id="af2-persoon">' + opties + '</select>';
+}
+
+function updateAfspraakPersonenField() {
+  var type = (document.getElementById('af2-type') || {}).value;
+  var wrap = document.getElementById('af2-persoon-wrap');
+  if (!wrap) return;
+  var currentPersoonId = null;
+  var currentPersonenIds = [];
+  var singleSel = document.getElementById('af2-persoon');
+  if (singleSel) currentPersoonId = parseInt(singleSel.value) || null;
+  document.querySelectorAll('.af2-persoon-check:checked').forEach(function(cb) { currentPersonenIds.push(parseInt(cb.value)); });
+  wrap.innerHTML = renderAfspraakPersonenField(type, currentPersoonId || currentPersonenIds[0] || null, currentPersonenIds.length ? currentPersonenIds : null);
+}
+
 function openAfspraakModal(persoonId, dateStr, afspraakId) {
   var afspraak = afspraakId ? state.afspraken.find(function(a) { return a.id === afspraakId; }) : null;
   var isNew = !afspraak;
@@ -816,21 +850,20 @@ function openAfspraakModal(persoonId, dateStr, afspraakId) {
   var defaultEindH = String((now.getHours() + 1) % 24).padStart(2, '0');
   var defaultEind = defaultEindH + ':' + mm;
 
-  var persoonOpties = state.personeel.map(function(p) {
-    var sel = (afspraak ? afspraak.persoon_id : persoonId) === p.id ? ' selected' : '';
-    return '<option value="' + p.id + '"' + sel + '>' + escHtml(p.naam) + '</option>';
-  }).join('');
+  var currentType = afspraak ? afspraak.type : 'klant';
+  var currentPersoonId = afspraak ? afspraak.persoon_id : persoonId;
+  var currentPersonenIds = afspraak ? (afspraak.personen_ids || null) : null;
 
   var typeOpties = [['klant', '🤝 Klant'], ['leverancier', '🚚 Leverancier'], ['intern', '🏢 Intern']].map(function(t) {
-    var sel = (afspraak ? afspraak.type : 'klant') === t[0] ? ' selected' : '';
+    var sel = currentType === t[0] ? ' selected' : '';
     return '<option value="' + t[0] + '"' + sel + '>' + t[1] + '</option>';
   }).join('');
 
   var html = '<div class="modal-header"><h2>' + (isNew ? '📅 Nieuwe afspraak' : '✏️ Afspraak bewerken') + '</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
     '<div class="modal-body">' +
     '<div class="form-section">' +
-    '<div class="form-grid-2"><div class="field"><label>Persoon</label><select class="input" id="af2-persoon">' + persoonOpties + '</select></div>' +
-    '<div class="field"><label>Type</label><select class="input" id="af2-type">' + typeOpties + '</select></div></div>' +
+    '<div class="field"><label>Type</label><select class="input" id="af2-type" onchange="updateAfspraakPersonenField()">' + typeOpties + '</select></div>' +
+    '<div class="field" id="af2-persoon-wrap">' + renderAfspraakPersonenField(currentType, currentPersoonId, currentPersonenIds) + '</div>' +
     '<div class="field"><label>Datum</label><input type="date" class="input" id="af2-datum" value="' + (afspraak ? afspraak.datum : (dateStr || todayStr())) + '" /></div>' +
     '<div class="field"><label>Titel *</label><input class="input" id="af2-titel" value="' + escHtml(afspraak ? afspraak.titel : '') + '" placeholder="Bijv. Klantbezoek, Leveranciersgesprek..." /></div>' +
     '<div class="form-grid-2"><div class="field"><label>Begintijd</label><input type="time" class="input" id="af2-start" value="' + (afspraak ? afspraak.start_tijd : defaultStart) + '" /></div>' +
@@ -843,8 +876,17 @@ function openAfspraakModal(persoonId, dateStr, afspraakId) {
 }
 
 async function submitAfspraak(editId) {
-  var persoonId = parseInt((document.getElementById('af2-persoon') || {}).value);
   var type = (document.getElementById('af2-type') || {}).value || 'klant';
+  var persoonId, personen_ids;
+  if (type === 'intern') {
+    var checks = Array.from(document.querySelectorAll('.af2-persoon-check:checked'));
+    personen_ids = checks.map(function(cb) { return parseInt(cb.value); });
+    if (personen_ids.length === 0) { showToast('Selecteer minimaal één persoon!', 'error'); return; }
+    persoonId = personen_ids[0];
+  } else {
+    persoonId = parseInt((document.getElementById('af2-persoon') || {}).value);
+    personen_ids = null;
+  }
   var datum = (document.getElementById('af2-datum') || {}).value;
   var titel = ((document.getElementById('af2-titel') || {}).value || '').trim();
   var start = (document.getElementById('af2-start') || {}).value;
@@ -852,7 +894,7 @@ async function submitAfspraak(editId) {
   var opmerkingen = (document.getElementById('af2-opmerking') || {}).value || '';
   if (!titel) { showToast('Titel is verplicht!', 'error'); return; }
   if (!datum) { showToast('Datum is verplicht!', 'error'); return; }
-  var a = { persoon_id: persoonId, datum: datum, type: type, titel: titel, start_tijd: start, eind_tijd: eind, opmerkingen: opmerkingen };
+  var a = { persoon_id: persoonId, datum: datum, type: type, titel: titel, start_tijd: start, eind_tijd: eind, opmerkingen: opmerkingen, personen_ids: personen_ids };
   if (editId) a.id = editId;
   var saved = await saveAfspraak(a);
   if (saved) {
