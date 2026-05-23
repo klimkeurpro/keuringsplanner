@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KeuringsPlanner</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1E293B" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KeuringsPlanner" />
+  <link rel="apple-touch-icon" href="icon.svg" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,6 +40,8 @@
     .btn-new-job:hover { background: #B45309; transform: translateY(-2px); box-shadow: 0 4px 16px rgba(217,119,6,0.5); }
     .btn-primary { padding: 8px 18px; border-radius: var(--radius); border: none; background: var(--text); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
     .btn-primary:hover { background: #334155; transform: translateY(-1px); }
+    .btn-secondary { padding: 8px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+    .btn-secondary:hover { background: var(--border); }
     .btn-primary.btn-yellow { background: var(--warning); color: var(--text); }
     .btn-primary.btn-yellow:hover { background: #B45309; color: #fff; }
 
@@ -74,50 +82,51 @@
     .cal-header-spacer { display: none; }
     .cal-header-day { flex: 1; font-size: 10px; font-weight: 800; color: var(--text-faint); text-align: center; text-transform: uppercase; letter-spacing: 1px; }
     .cal-week-row { display: flex; gap: 0; margin-bottom: 5px; align-items: stretch; }
-    .hour-labels { width: 44px; flex-shrink: 0; padding-top: 28px; display: flex; flex-direction: column; }
+    .hour-labels { width: 44px; flex-shrink: 0; padding-top: 82px; display: flex; flex-direction: column; }
     .hour-label { flex: 1; font-size: 9px; color: var(--text-faint); text-align: right; padding-right: 5px; display: flex; align-items: flex-start; justify-content: flex-end; }
     .cal-week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; flex: 1; min-width: 0; }
-    .cal-day { background: var(--surface); border-radius: 9px; padding: 7px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); cursor: pointer; min-height: 340px; display: flex; flex-direction: column; transition: box-shadow 0.2s; }
+    /* ─── Calendar day card ─── */
+    .cal-day { background: var(--surface); border-radius: 9px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); cursor: pointer; min-height: 340px; display: flex; flex-direction: column; transition: box-shadow 0.2s; overflow: hidden; }
     .cal-day:hover:not(.past) { box-shadow: var(--shadow-md); }
     .cal-day.today { border: 2px solid var(--warning); box-shadow: 0 2px 12px rgba(217,119,6,0.12); }
     .cal-day.past { opacity: 0.45; cursor: default; background: #FAFBFC; }
     .cal-day.override { border: 2px dashed var(--accent); }
-    .cal-day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+    .cal-day-header { display: flex; justify-content: space-between; align-items: center; padding: 7px 7px 4px; flex-shrink: 0; }
     .cal-day-num { display: flex; align-items: baseline; gap: 3px; }
     .day-number { font-size: 15px; font-weight: 800; }
     .day-month { font-size: 9px; color: var(--text-faint); }
     .cal-day-badges { display: flex; gap: 3px; }
-    .cal-day-bottom { position: relative; z-index: 1; }
     .badge { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 99px; }
     .badge-today { color: #fff; background: var(--warning); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
     .badge-override { color: var(--accent); background: var(--accent-light); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
     .badge-absent { background: var(--danger-light); color: var(--danger); font-size: 9px; padding: 1px 5px; border-radius: 3px; }
-    .capacity-bar { width: 100%; background: var(--border); border-radius: 5px; height: 6px; overflow: hidden; display: flex; margin-bottom: 2px; }
-    .cap-afspraak { height: 100%; background: var(--accent); transition: width 0.3s; }
-    .cap-tussendoor { height: 100%; background: var(--text-faint); transition: width 0.3s; }
-    .cal-day-info { font-size: 9px; color: var(--text-muted); font-weight: 600; margin-bottom: 3px; display: flex; justify-content: space-between; }
-    .cal-day-info.danger { color: var(--danger); }
-    .cal-day-info .free { color: var(--success); font-size: 10px; }
-    .cal-day-info .over { color: var(--danger); font-weight: 800; font-size: 10px; }
-    .cal-day-items { flex: 1; }
-    .cal-pill { padding: 3px 6px; margin-bottom: 2px; border-radius: 5px; font-size: 11px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 3px; transition: transform 0.1s; }
-    .cal-pill:hover { transform: scale(1.02); }
-    .pill-afspraak { background: var(--accent-light); border-left: 3px solid var(--accent); }
-    .pill-tussendoor { background: var(--muted-light); border-left: 3px solid var(--text-faint); }
-    .pill-warning { background: var(--danger-light); border-left: 3px solid var(--danger); }
-    .pill-overflow { background: var(--danger-light); border-left: 3px solid var(--danger); }
-    .pill-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-    .pill-hours { color: var(--text-faint); flex-shrink: 0; font-size: 10px; }
-    .pill-divider { border-top: 1px dashed var(--border); margin: 1px 0; }
 
-    /* ─── Staff Bars in Calendar (achtergrond) ─── */
-    .cal-day { position: relative; overflow: hidden; }
-    .staff-bars-bg { position: absolute; top: 28px; left: 4px; right: 4px; bottom: 4px; pointer-events: none; z-index: 0; }
+    /* ─── Capaciteitssectie (boven de personeelsbalkjes) ─── */
+    .cal-cap-section { padding: 3px 7px 4px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
+    .cap-bar-new { display: flex; height: 20px; border-radius: 4px; overflow: hidden; gap: 1px; margin-bottom: 2px; background: var(--border); }
+    .cap-seg { display: flex; align-items: center; padding: 0 3px; font-size: 8px; font-weight: 700; color: #fff; overflow: hidden; white-space: nowrap; min-width: 0; cursor: pointer; transition: opacity 0.1s; flex-shrink: 0; }
+    .cap-seg:hover { opacity: 0.82; }
+    .cap-seg-keuring { background: var(--accent); }
+    .cap-seg-wacht { background: var(--text-faint); }
+    .cap-seg-afspraak { background: var(--warning); cursor: default; }
+    .cap-seg-overflow { background: var(--danger); }
+    .cap-seg-vrij { background: var(--success-light); color: var(--success); font-size: 8px; font-weight: 700; cursor: default; flex-shrink: 1; min-width: 0; }
+    .cal-day-info { font-size: 9px; color: var(--text-muted); font-weight: 600; display: flex; justify-content: space-between; }
+    .cal-day-info.danger { color: var(--danger); }
+    .cal-day-info .over { color: var(--danger); font-weight: 800; }
+
+    /* ─── Personeelsbalkjes sectie (los onder capaciteit) ─── */
+    .cal-staff-area { flex: 1; position: relative; min-height: 160px; overflow: hidden; }
     .staff-bar-bg { position: absolute; border-left: 3px solid; border-radius: 0 4px 4px 0; padding: 2px 3px; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; opacity: 0.9; }
     .staff-bar-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
     .staff-bar-cap { font-size: 8px; opacity: 0.7; }
-    .cal-day-header, .cal-day-content, .cal-day-items { position: relative; z-index: 1; }
-    .cal-day-content { margin-top: 55px; }
+    .staff-area-hint { position: absolute; bottom: 4px; right: 4px; font-size: 8px; color: var(--text-ghost); font-style: italic; pointer-events: none; }
+
+    /* ─── Blokken in personeelsbalkjes ─── */
+    .afspraak-blok { position: absolute; left: 2px; right: 2px; border-radius: 3px; padding: 1px 3px; font-size: 8px; font-weight: 700; color: #fff; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; opacity: 0.92; z-index: 2; }
+    .afspraak-blok:hover { opacity: 1; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+    .keuring-blok { position: absolute; left: 2px; right: 2px; border-radius: 3px; padding: 1px 3px; font-size: 8px; font-weight: 700; color: #fff; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; opacity: 0.75; z-index: 1; border-left: 3px solid rgba(255,255,255,0.4); }
+    .keuring-blok:hover { opacity: 0.9; }
 
     /* ─── Kanban ─── */
     .kanban-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
@@ -129,6 +138,8 @@
     .kanban-card.border-accent { border-left: 4px solid var(--accent); }
     .kanban-card.border-danger { border-left: 4px solid var(--danger); }
     .kanban-card.border-muted { border-left: 4px solid var(--text-faint); }
+    .kanban-card.border-future { border-left: 4px solid var(--warning); opacity: 0.7; }
+    .badge-future { background: var(--warning-light); color: var(--warning); }
     .kanban-card.border-future { border-left: 4px solid var(--warning); opacity: 0.7; }
     .badge-future { background: var(--warning-light); color: var(--warning); }
     .kanban-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
