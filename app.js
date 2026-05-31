@@ -31,7 +31,7 @@ let state = {
     dagOverrides: {},
     wachtwoord: '',
   },
-  activeTab: 'kalender', weeksToShow: 4, archiefZoek: '', loading: true, authenticated: false,
+  activeTab: 'kalender', weeksToShow: 6, kalenderOffset: 0, archiefZoek: '', loading: true, authenticated: false,
   vakantieOverrides: null, urenJaar: new Date().getFullYear(),
 };
 
@@ -220,7 +220,8 @@ function renderStatsBar() {
 
 // Calendar Render
 function renderCalendar() {
-  var startMonday = getMondayOfWeek(todayStr());
+  var base = new Date(); base.setDate(base.getDate() + state.kalenderOffset * 7);
+  var startMonday = getMondayOfWeek(toDateStr(base));
   var allDays = getWorkdays(startMonday, state.weeksToShow);
   var calendar = buildCalendar(state.jobs, allDays);
   var today = todayStr();
@@ -490,8 +491,19 @@ function render() {
   }).join('');
   var weekPicker = '';
   if (state.activeTab === 'kalender') {
-    weekPicker = '<div class="week-picker"><span class="filter-label">Weken:</span>' +
-      [3,4,6,8,12].map(function(w) { return '<button class="week-btn ' + (state.weeksToShow === w ? 'active' : '') + '" onclick="state.weeksToShow=' + w + '; render();">' + w + '</button>'; }).join('') + '</div>';
+    var navBase = new Date(); navBase.setDate(navBase.getDate() + state.kalenderOffset * 7);
+    var navMonday = getMondayOfWeek(toDateStr(navBase));
+    var navDate = parseDate(navMonday);
+    var maandNamen = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+    var navLabel = maandNamen[navDate.getMonth()] + ' ' + navDate.getFullYear();
+    weekPicker = '<div class="week-picker" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+      '<button class="week-btn" onclick="state.kalenderOffset-=state.weeksToShow;render()" title="Vorige periode">◀</button>' +
+      '<button class="week-btn" style="min-width:130px;font-weight:600" onclick="openMaandPicker()">' + navLabel + ' ▾</button>' +
+      (state.kalenderOffset !== 0 ? '<button class="week-btn" onclick="state.kalenderOffset=0;render()" title="Naar vandaag">↩ Nu</button>' : '') +
+      '<button class="week-btn" onclick="state.kalenderOffset+=state.weeksToShow;render()" title="Volgende periode">▶</button>' +
+      '<span class="filter-label" style="margin-left:6px">Weken:</span>' +
+      [3,4,6,8,12].map(function(w) { return '<button class="week-btn ' + (state.weeksToShow === w ? 'active' : '') + '" onclick="state.weeksToShow=' + w + '; render();">' + w + '</button>'; }).join('') +
+      '</div>';
   }
   app.innerHTML = '<header class="header"><div class="header-inner"><div class="header-left">' +
     '<h1 class="logo">⚙️ KeuringsPlanner</h1><p class="subtitle">Intake · Planning · Capaciteit · Personeel</p></div>' +
@@ -1019,6 +1031,34 @@ async function doDeletePersoneel(id) {
 }
 
 // Afwezigheid Modal
+function openMaandPicker() {
+  var maandNamen = ['Jan','Feb','Mrt','Apr','Mei','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+  var today = new Date();
+  var curYear = today.getFullYear();
+  // Toon 3 jaar: vorig jaar, dit jaar, volgend jaar
+  var years = [curYear - 1, curYear, curYear + 1];
+  var html = '<div class="modal-header"><h2>📅 Ga naar maand</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
+    '<div class="modal-body">';
+  years.forEach(function(jaar) {
+    html += '<div style="margin-bottom:16px"><div style="font-weight:600;margin-bottom:8px">' + jaar + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">';
+    maandNamen.forEach(function(naam, mi) {
+      // Bereken offset: eerste maandag van die maand t.o.v. huidige maandag
+      var target = new Date(jaar, mi, 1);
+      var targetMonday = getMondayOfWeek(toDateStr(target));
+      var todayMonday = getMondayOfWeek(toDateStr(today));
+      var diffMs = parseDate(targetMonday) - parseDate(todayMonday);
+      var diffWeken = Math.round(diffMs / (7 * 24 * 3600 * 1000));
+      var isHuidig = (jaar === today.getFullYear() && mi === today.getMonth());
+      html += '<button class="btn-sm' + (isHuidig ? ' active' : '') + '" style="' + (isHuidig ? 'font-weight:700;' : '') + '" ' +
+        'onclick="state.kalenderOffset=' + diffWeken + ';closeModal();render()">' + naam + '</button>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  openModal(html);
+}
+
 function openAfwezigheidModal() {
   var html = '<div class="modal-header"><h2>🏖️ Afwezigheden</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
     '<div class="modal-body"><div class="form-section"><div class="section-title">Nieuwe afwezigheid plannen</div>' +
