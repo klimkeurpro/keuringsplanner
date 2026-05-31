@@ -13,7 +13,7 @@ const HOUR_START = 8;
 const HOUR_END = 18;
 const AFKEUR_OPTIES = ['Niet vervangen', 'Kleine reparaties meteen uitvoeren', 'Alles meteen vervangen voor vergelijkbaar product', 'Eerst bellen'];
 const STAFF_COLORS = ['#DC2626','#EA580C','#D97706','#CA8A04','#65A30D','#16A34A','#0891B2','#2563EB','#4338CA','#6D28D9','#7C3AED','#9333EA','#C026D3','#DB2777','#E11D48'];
-const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', anders: '📋 Anders' };
+const ABSENCE_LABELS = { ziek: '🤒 Ziek', vakantie: '🏖️ Vakantie', verlof: '📋 Verlof', adv: '⏱️ ADV', anders: '📋 Anders' };
 
 let state = {
   jobs: [], archief: [], todos: [], personeel: [], afwezigheden: [], dagOverrides: [], afspraken: [],
@@ -970,9 +970,21 @@ function renderEditPersoneelForm() {
     '<div class="toggle-row" style="margin-top:8px" onclick="window._editPerson.is_zzper = !window._editPerson.is_zzper; renderEditPersoneelForm();">' +
     '<div class="toggle-switch ' + (p.is_zzper ? 'on' : '') + '"><div class="toggle-dot"></div></div>' +
     '<span class="toggle-label">' + (p.is_zzper ? '🔑 ZZP\'er — standaard niet ingepland, per dag in te schakelen via de kalender' : 'Geen ZZP\'er') + '</span></div>' +
-    '<div class="field" style="margin-top:10px"><label>🏖️ Vakantie-uren per jaar</label>' +
-    '<div class="field-row compact"><input type="number" step="1" class="input-num" style="width:70px" value="' + (p.vakantie_uren_per_jaar || '') + '" placeholder="200" onchange="window._editPerson.vakantie_uren_per_jaar=parseFloat(this.value)||0" /><span class="unit">uur</span>' +
-    '<span class="hint-text" style="margin-left:8px">bijv. 25 dagen × 8u = 200u</span></div></div></div>' +
+    (!p.is_zzper ? (
+      '<div class="form-section"><div class="section-title">⏱️ Uren & verlof</div>' +
+      '<div class="form-grid-2">' +
+      '<div class="field"><label>Contracturen / week</label>' +
+      '<div class="field-row compact"><input type="number" step="0.5" class="input-num" style="width:70px" value="' + (p.contract_uren_per_week || '') + '" placeholder="32" onchange="window._editPerson.contract_uren_per_week=parseFloat(this.value)||null" /><span class="unit">u/week</span></div></div>' +
+      '<div class="field"><label>Feitelijk gewerkt / week</label>' +
+      '<div class="field-row compact"><input type="number" step="0.5" class="input-num" style="width:70px" value="' + (p.feitelijk_uren_per_week || '') + '" placeholder="38" onchange="window._editPerson.feitelijk_uren_per_week=parseFloat(this.value)||null" /><span class="unit">u/week</span></div>' +
+      '<div class="hint-text">Verschil bouwt ADV op</div></div>' +
+      '</div>' +
+      '<div class="field"><label>🏖️ Vakantie-uren per jaar <span style="color:#6B7280;font-weight:400">(leeg = automatisch 5 wk × contracturen)</span></label>' +
+      '<div class="field-row compact"><input type="number" step="1" class="input-num" style="width:70px" value="' + (p.vakantie_uren_per_jaar != null ? p.vakantie_uren_per_jaar : '') + '" placeholder="auto" onchange="window._editPerson.vakantie_uren_per_jaar=this.value===\'\'?null:(parseFloat(this.value)||0)" /><span class="unit">uur</span>' +
+      '<span class="hint-text" style="margin-left:8px">handmatige override</span></div></div>' +
+      '</div>'
+    ) : '') +
+    '</div>' +
     '<div class="form-section"><div class="section-title">📅 Weekrooster</div>';
   DAY_NAMES.forEach(function(d, di) {
     var r = p.weekrooster[d];
@@ -1017,7 +1029,7 @@ function openAfwezigheidModal() {
     '<div class="form-grid-2"><div class="field"><label>Wie</label><select class="input" id="af-persoon">' +
     state.personeel.map(function(p) { return '<option value="' + p.id + '">' + escHtml(p.naam) + '</option>'; }).join('') +
     '</select></div><div class="field"><label>Reden</label>' +
-    '<select class="input" id="af-reden"><option value="vakantie">🏖️ Vakantie</option><option value="ziek">🤒 Ziek</option><option value="verlof">📋 Verlof</option></select></div></div>' +
+    '<select class="input" id="af-reden"><option value="vakantie">🏖️ Vakantie</option><option value="adv">⏱️ ADV</option><option value="verlof">📋 Verlof</option><option value="ziek">🤒 Ziek</option><option value="anders">📋 Anders</option></select></div></div>' +
     '<div class="form-grid-2"><div class="field"><label>Van</label><input type="date" class="input" id="af-van" value="' + todayStr() + '" /></div>' +
     '<div class="field"><label>Tot en met</label><input type="date" class="input" id="af-tot" value="' + todayStr() + '" /></div></div>' +
     '<div class="field"><label>Notitie</label><input class="input" id="af-notitie" placeholder="Optioneel..." /></div>' +
@@ -1524,10 +1536,72 @@ function nieuweKlusVanVorige(id, bron) {
 }
 
 // Uren / vakantiesaldo
+// ─── FEESTDAGEN ───
+function easterDate(year) {
+  var a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  var d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  var g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  var i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  var m = Math.floor((a + 11 * h + 22 * l) / 451);
+  var month = Math.floor((h + l - 7 * m + 114) / 31);
+  var day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+function getNLFeestdagen(jaar) {
+  var feestdagen = [];
+  var addDate = function(d) { feestdagen.push(toDateStr(d)); };
+  // Vaste feestdagen
+  addDate(new Date(jaar, 0, 1));   // Nieuwjaarsdag
+  addDate(new Date(jaar, 11, 25)); // 1e Kerstdag
+  addDate(new Date(jaar, 11, 26)); // 2e Kerstdag
+  // Koningsdag: 27 april, maar als dat zondag is dan 26 april
+  var kd = new Date(jaar, 3, 27);
+  if (kd.getDay() === 0) kd = new Date(jaar, 3, 26);
+  addDate(kd);
+  // Bevrijdingsdag 5 mei (elk jaar)
+  addDate(new Date(jaar, 4, 5));
+  // Paas-gerelateerde feestdagen
+  var pasen = easterDate(jaar);
+  var addDays = function(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  addDate(addDays(pasen, -2)); // Goede Vrijdag
+  addDate(pasen);              // 1e Paasdag
+  addDate(addDays(pasen, 1));  // 2e Paasdag
+  addDate(addDays(pasen, 39)); // Hemelvaartsdag
+  addDate(addDays(pasen, 49)); // 1e Pinksterdag
+  addDate(addDays(pasen, 50)); // 2e Pinksterdag
+  return feestdagen;
+}
+function isFeestdag(dateStr, feestdagen) {
+  return feestdagen.indexOf(dateStr) !== -1;
+}
+function getWerkdagenInJaar(jaar, feestdagen) {
+  // Tel alle ma-vr in het jaar, minus feestdagen op werkdagen
+  var count = 0;
+  var d = new Date(jaar, 0, 1);
+  while (d.getFullYear() === jaar) {
+    var dw = d.getDay();
+    if (dw >= 1 && dw <= 5 && !isFeestdag(toDateStr(d), feestdagen)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
 function berekenVakantieUren(persoonId, jaar, vakantieOverrides) {
   var p = state.personeel.find(function(x) { return x.id === persoonId; });
-  if (!p) return { toegekend: 0, opgenomen: 0, resterend: 0 };
-  var toegekend = parseFloat(p.vakantie_uren_per_jaar) || 0;
+  if (!p) return { toegekend: 0, opgenomen: 0, resterend: 0, automatisch: false };
+  // Toegekend: handmatige override of 5 weken × contracturen/week
+  var contract = parseFloat(p.contract_uren_per_week) || 0;
+  var automatischToegewezen = false;
+  var toegekend;
+  if (p.vakantie_uren_per_jaar != null && p.vakantie_uren_per_jaar !== '') {
+    toegekend = parseFloat(p.vakantie_uren_per_jaar) || 0;
+  } else if (contract > 0) {
+    toegekend = r2(5 * contract);
+    automatischToegewezen = true;
+  } else {
+    toegekend = 0;
+  }
+  var feestdagen = getNLFeestdagen(jaar);
   var opgenomen = 0;
   state.afwezigheden.filter(function(a) {
     return a.persoon_id === persoonId && a.reden === 'vakantie';
@@ -1535,7 +1609,7 @@ function berekenVakantieUren(persoonId, jaar, vakantieOverrides) {
     var cur = parseDate(a.van_datum); var end = parseDate(a.tot_datum);
     while (cur <= end) {
       var ds = toDateStr(cur);
-      if (ds.substring(0, 4) === String(jaar)) {
+      if (ds.substring(0, 4) === String(jaar) && !isFeestdag(ds, feestdagen)) {
         var dk = dayKey(ds);
         if (dk) { var r = p.weekrooster && p.weekrooster[dk]; if (r && r.actief) opgenomen += timeToHours(r.eind) - timeToHours(r.start); }
       }
@@ -1550,36 +1624,150 @@ function berekenVakantieUren(persoonId, jaar, vakantieOverrides) {
     var diff = r2(normaal - actueel); if (diff > 0) opgenomen += diff;
   });
   opgenomen = r2(opgenomen);
-  return { toegekend: toegekend, opgenomen: opgenomen, resterend: r2(toegekend - opgenomen) };
+  return { toegekend: toegekend, opgenomen: opgenomen, resterend: r2(toegekend - opgenomen), automatisch: automatischToegewezen };
+}
+
+function berekenADVUren(persoonId, jaar) {
+  var p = state.personeel.find(function(x) { return x.id === persoonId; });
+  if (!p || p.is_zzper) return null;
+  var contract = parseFloat(p.contract_uren_per_week) || 0;
+  var feitelijk = parseFloat(p.feitelijk_uren_per_week) || 0;
+  var extraPerWeek = r2(feitelijk - contract);
+  if (extraPerWeek <= 0) return null;
+  var feestdagen = getNLFeestdagen(jaar);
+  var werkdagen = getWerkdagenInJaar(jaar, feestdagen);
+  var werkweken = r2(werkdagen / 5);
+  var opgebouwd = r2(extraPerWeek * werkweken);
+  // Opgenomen ADV: som van afwezigheidsuren met reden 'adv' in dit jaar
+  var opgenomen = 0;
+  state.afwezigheden.filter(function(a) {
+    return a.persoon_id === persoonId && a.reden === 'adv';
+  }).forEach(function(a) {
+    var cur = parseDate(a.van_datum); var end = parseDate(a.tot_datum);
+    while (cur <= end) {
+      var ds = toDateStr(cur);
+      if (ds.substring(0, 4) === String(jaar) && !isFeestdag(ds, feestdagen)) {
+        var dk = dayKey(ds);
+        if (dk) { var r = p.weekrooster && p.weekrooster[dk]; if (r && r.actief) opgenomen += timeToHours(r.eind) - timeToHours(r.start); }
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+  opgenomen = r2(opgenomen);
+  return { extraPerWeek: extraPerWeek, werkweken: werkweken, opgebouwd: opgebouwd, opgenomen: opgenomen, resterend: r2(opgebouwd - opgenomen) };
+}
+
+function renderSaldoBalk(opgenomen, totaal, kleur) {
+  var pct = totaal > 0 ? Math.min(100, Math.round(opgenomen / totaal * 100)) : 0;
+  return '<div style="background:#F3F4F6;border-radius:6px;height:8px;margin:6px 0;overflow:hidden">' +
+    '<div style="height:100%;width:' + pct + '%;background:' + kleur + ';border-radius:6px"></div></div>';
+}
+function renderSaldoRij(label, opgenomen, totaal, resterend) {
+  var kleur = resterend < 0 ? '#EF4444' : '#059669';
+  return '<div style="display:flex;justify-content:space-between;font-size:12px;color:#6B7280">' +
+    '<span>' + label + '</span>' +
+    '<span>Opgenomen: <strong style="color:#111">' + opgenomen + 'u</strong> &nbsp;·&nbsp; ' +
+    'Resterend: <strong style="color:' + kleur + '">' + resterend + 'u</strong> &nbsp;·&nbsp; ' +
+    'Totaal: ' + totaal + 'u</span></div>';
 }
 
 function renderUrenOverzicht() {
   var jaar = state.urenJaar;
   var ovs = state.vakantieOverrides || [];
-  var html = '<div class="page-section"><div class="section-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-    '<h2 style="margin:0">🏖️ Vakantiesaldo ' + jaar + '</h2>' +
+  var feestdagen = getNLFeestdagen(jaar);
+  var DAG_NL = ['zo','ma','di','wo','do','vr','za'];
+  var maandNL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  var html = '<div class="page-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+    '<h2 style="margin:0">🏖️ Uren & verlof ' + jaar + '</h2>' +
     '<div style="display:flex;gap:6px">' +
     '<button class="btn-sm" onclick="state.urenJaar=' + (jaar - 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">← ' + (jaar - 1) + '</button>' +
     '<button class="btn-sm" onclick="state.urenJaar=' + (jaar + 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">' + (jaar + 1) + ' →</button>' +
     '</div></div>';
   if (state.personeel.length === 0) return html + '<div class="empty-hint">Geen personeel geconfigureerd.</div></div>';
   if (state.vakantieOverrides === null) return html + '<div class="empty-hint">Laden...</div></div>';
-  state.personeel.forEach(function(p) {
-    var s = berekenVakantieUren(p.id, jaar, ovs);
-    var pct = s.toegekend > 0 ? Math.min(100, Math.round(s.opgenomen / s.toegekend * 100)) : 0;
-    var barColor = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#10B981';
-    html += '<div class="card" style="margin-bottom:12px">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
-      '<div class="staff-color-dot" style="background:' + p.kleur + '"></div><strong>' + escHtml(p.naam) + '</strong></div>' +
-      '<div style="background:#F3F4F6;border-radius:6px;height:10px;margin-bottom:8px;overflow:hidden">' +
-      '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:6px"></div></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:13px">' +
-      '<span>Opgenomen: <strong>' + s.opgenomen + 'u</strong></span>' +
-      '<span>Resterend: <strong style="color:' + (s.resterend < 0 ? '#EF4444' : '#059669') + '">' + s.resterend + 'u</strong></span>' +
-      '<span style="color:#6B7280">Totaal: ' + s.toegekend + 'u</span></div>' +
-      (s.toegekend === 0 ? '<div class="hint-text" style="margin-top:6px">Stel vakantie-uren in via 👥 Personeel → medewerker bewerken</div>' : '') +
+
+  // Medewerkers (niet-ZZP eerst, dan ZZP)
+  var medewerkers = state.personeel.slice().sort(function(a,b) { return (a.is_zzper ? 1 : 0) - (b.is_zzper ? 1 : 0); });
+  medewerkers.forEach(function(p) {
+    html += '<div class="card" style="margin-bottom:16px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">' +
+      '<div class="staff-color-dot" style="background:' + p.kleur + '"></div>' +
+      '<strong>' + escHtml(p.naam) + '</strong>' +
+      (p.is_zzper ? ' <span style="font-size:11px;color:#6B7280">ZZP</span>' : '') +
+      '</div>';
+
+    if (p.is_zzper) {
+      html += '<div class="hint-text">ZZP\'ers hebben geen vakantiesaldo via de planner.</div>';
+    } else {
+      var vak = berekenVakantieUren(p.id, jaar, ovs);
+      var adv = berekenADVUren(p.id, jaar);
+      var contract = parseFloat(p.contract_uren_per_week) || 0;
+      var feitelijk = parseFloat(p.feitelijk_uren_per_week) || 0;
+
+      // Contract info
+      if (contract > 0) {
+        var infoStr = contract + 'u/week contract';
+        if (feitelijk > contract) infoStr += ' · ' + feitelijk + 'u/week feitelijk (+' + r2(feitelijk - contract) + 'u ADV-opbouw)';
+        html += '<div style="font-size:12px;color:#6B7280;margin-bottom:10px">📋 ' + infoStr + '</div>';
+      } else {
+        html += '<div style="font-size:12px;color:#F59E0B;margin-bottom:10px">⚠️ Stel contracturen in via 👥 Personeel om automatisch te berekenen.</div>';
+      }
+
+      // Vakantiesaldo
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-size:12px;font-weight:600;margin-bottom:2px">🏖️ Vakantie' + (vak.automatisch ? ' <span style="color:#6B7280;font-weight:400">(5 wk × ' + contract + 'u)</span>' : '') + '</div>';
+      html += renderSaldoBalk(vak.opgenomen, vak.toegekend, vak.resterend < 0 ? '#EF4444' : '#2563EB');
+      html += renderSaldoRij('', vak.opgenomen, vak.toegekend, vak.resterend);
+      html += '</div>';
+
+      // ADV-saldo (alleen als er overuren zijn)
+      if (adv) {
+        html += '<div style="margin-bottom:4px">';
+        html += '<div style="font-size:12px;font-weight:600;margin-bottom:2px">⏱️ ADV <span style="color:#6B7280;font-weight:400">(' + adv.extraPerWeek + 'u/week × ' + adv.werkweken + ' werkweken)</span></div>';
+        html += renderSaldoBalk(adv.opgenomen, adv.opgebouwd, adv.resterend < 0 ? '#EF4444' : '#7C3AED');
+        html += renderSaldoRij('', adv.opgenomen, adv.opgebouwd, adv.resterend);
+        html += '</div>';
+      } else if (!p.is_zzper && feitelijk <= contract && contract > 0) {
+        html += '<div style="font-size:12px;color:#6B7280">⏱️ Geen ADV-opbouw (feitelijke uren ≤ contracturen)</div>';
+      }
+    }
+    html += '</div>';
+  });
+
+  // Feestdagen blok
+  html += '<div class="card" style="margin-top:8px"><div style="font-weight:600;margin-bottom:10px">🇳🇱 Officiële feestdagen ' + jaar + '</div>';
+  var feestNamen = {};
+  var fd = feestdagen.slice().sort();
+  var pasen = easterDate(jaar);
+  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+  var pStr = pasen.getFullYear() + '-' + pad(pasen.getMonth()+1) + '-' + pad(pasen.getDate());
+  var addDays2 = function(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return toDateStr(r); };
+  feestNamen[jaar + '-01-01'] = 'Nieuwjaarsdag';
+  feestNamen[addDays2(pasen, -2)] = 'Goede Vrijdag';
+  feestNamen[pStr] = '1e Paasdag';
+  feestNamen[addDays2(pasen, 1)] = '2e Paasdag';
+  var kdStr = (new Date(jaar, 3, 27)).getDay() === 0 ? jaar + '-04-26' : jaar + '-04-27';
+  feestNamen[kdStr] = 'Koningsdag';
+  feestNamen[jaar + '-05-05'] = 'Bevrijdingsdag';
+  feestNamen[addDays2(pasen, 39)] = 'Hemelvaartsdag';
+  feestNamen[addDays2(pasen, 49)] = '1e Pinksterdag';
+  feestNamen[addDays2(pasen, 50)] = '2e Pinksterdag';
+  feestNamen[jaar + '-12-25'] = '1e Kerstdag';
+  feestNamen[jaar + '-12-26'] = '2e Kerstdag';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px">';
+  fd.forEach(function(ds) {
+    var d = parseDate(ds);
+    var dagNaam = DAG_NL[d.getDay()];
+    var label = d.getDate() + ' ' + maandNL[d.getMonth()] + ' (' + dagNaam + ')';
+    var isWerkdag = d.getDay() >= 1 && d.getDay() <= 5;
+    html += '<div style="font-size:12px;padding:3px 0;display:flex;gap:6px">' +
+      '<span style="color:#6B7280;min-width:80px">' + label + '</span>' +
+      '<span>' + (feestNamen[ds] || ds) + '</span>' +
+      (!isWerkdag ? '<span style="color:#9CA3AF;font-size:10px">(weekend)</span>' : '') +
       '</div>';
   });
+  html += '</div></div>';
+
   return html + '</div>';
 }
 

@@ -145,7 +145,7 @@ async function fetchPersoneel() {
 }
 
 async function savePersoneelslid(p) {
-  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, is_zzper: p.is_zzper || false, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null };
+  const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, is_zzper: p.is_zzper || false, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null, contract_uren_per_week: p.contract_uren_per_week ?? null, feitelijk_uren_per_week: p.feitelijk_uren_per_week ?? null };
   if (p.id) {
     const { data, error } = await db.from('personeel').update(row).eq('id', p.id).select().single();
     if (error) { console.error('Fout bij opslaan personeelslid:', error); return null; }
