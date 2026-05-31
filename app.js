@@ -972,13 +972,9 @@ function renderEditPersoneelForm() {
     '<span class="toggle-label">' + (p.is_zzper ? '🔑 ZZP\'er — standaard niet ingepland, per dag in te schakelen via de kalender' : 'Geen ZZP\'er') + '</span></div>' +
     (!p.is_zzper ? (
       '<div class="form-section"><div class="section-title">⏱️ Uren & verlof</div>' +
-      '<div class="form-grid-2">' +
       '<div class="field"><label>Contracturen / week</label>' +
-      '<div class="field-row compact"><input type="number" step="0.5" class="input-num" style="width:70px" value="' + (p.contract_uren_per_week || '') + '" placeholder="32" onchange="window._editPerson.contract_uren_per_week=parseFloat(this.value)||null" /><span class="unit">u/week</span></div></div>' +
-      '<div class="field"><label>Feitelijk gewerkt / week</label>' +
-      '<div class="field-row compact"><input type="number" step="0.5" class="input-num" style="width:70px" value="' + (p.feitelijk_uren_per_week || '') + '" placeholder="38" onchange="window._editPerson.feitelijk_uren_per_week=parseFloat(this.value)||null" /><span class="unit">u/week</span></div>' +
-      '<div class="hint-text">Verschil bouwt ADV op</div></div>' +
-      '</div>' +
+      '<div class="field-row compact"><input type="number" step="0.5" class="input-num" style="width:70px" value="' + (p.contract_uren_per_week || '') + '" placeholder="32" onchange="window._editPerson.contract_uren_per_week=parseFloat(this.value)||null" /><span class="unit">u/week</span>' +
+      '<span class="hint-text" style="margin-left:8px">Feitelijk gewerkt komt uit het weekrooster. Verschil bouwt ADV op.</span></div></div>' +
       '<div class="field"><label>🏖️ Vakantie-uren per jaar <span style="color:#6B7280;font-weight:400">(leeg = automatisch 5 wk × contracturen)</span></label>' +
       '<div class="field-row compact"><input type="number" step="1" class="input-num" style="width:70px" value="' + (p.vakantie_uren_per_jaar != null ? p.vakantie_uren_per_jaar : '') + '" placeholder="auto" onchange="window._editPerson.vakantie_uren_per_jaar=this.value===\'\'?null:(parseFloat(this.value)||0)" /><span class="unit">uur</span>' +
       '<span class="hint-text" style="margin-left:8px">handmatige override</span></div></div>' +
@@ -1631,14 +1627,48 @@ function berekenADVUren(persoonId, jaar) {
   var p = state.personeel.find(function(x) { return x.id === persoonId; });
   if (!p || p.is_zzper) return null;
   var contract = parseFloat(p.contract_uren_per_week) || 0;
-  var feitelijk = parseFloat(p.feitelijk_uren_per_week) || 0;
-  var extraPerWeek = r2(feitelijk - contract);
-  if (extraPerWeek <= 0) return null;
+  if (contract <= 0) return null;
+
+  // Feitelijk uit weekrooster
+  var roosterDagen = DAY_NAMES.filter(function(d) { return p.weekrooster && p.weekrooster[d] && p.weekrooster[d].actief; });
+  var feitelijkPerWeek = roosterDagen.reduce(function(sum, d) {
+    var r = p.weekrooster[d]; return sum + timeToHours(r.eind) - timeToHours(r.start);
+  }, 0);
+  feitelijkPerWeek = r2(feitelijkPerWeek);
+  if (feitelijkPerWeek <= contract) return null;
+
+  // ADV-opbouw per dag = roosteruren die dag - (contract / aantal roosterdagen)
+  var contractPerDag = roosterDagen.length > 0 ? r2(contract / roosterDagen.length) : 0;
   var feestdagen = getNLFeestdagen(jaar);
-  var werkdagen = getWerkdagenInJaar(jaar, feestdagen);
-  var werkweken = r2(werkdagen / 5);
-  var opgebouwd = r2(extraPerWeek * werkweken);
-  // Opgenomen ADV: som van afwezigheidsuren met reden 'adv' in dit jaar
+
+  // Loop door alle werkdagen van het jaar, tel alleen aanwezige dagen mee
+  var opgebouwd = 0;
+  var d = new Date(jaar, 0, 1);
+  while (d.getFullYear() === jaar) {
+    var dw = d.getDay();
+    if (dw >= 1 && dw <= 5) {
+      var ds = toDateStr(d);
+      var dk = dayKey(ds);
+      if (dk && !isFeestdag(ds, feestdagen)) {
+        var rr = p.weekrooster && p.weekrooster[dk];
+        if (rr && rr.actief) {
+          // Niet opbouwen als afwezig (welke reden dan ook)
+          var afwezig = state.afwezigheden.some(function(a) { return a.persoon_id === persoonId && ds >= a.van_datum && ds <= a.tot_datum; });
+          var dagOv = state.dagOverrides.find(function(o) { return o.persoon_id === persoonId && o.datum === ds; });
+          var aanwezig = !afwezig && !(dagOv && dagOv.aanwezig === false);
+          if (aanwezig) {
+            var dagUren = timeToHours(rr.eind) - timeToHours(rr.start);
+            var extra = r2(dagUren - contractPerDag);
+            if (extra > 0) opgebouwd += extra;
+          }
+        }
+      }
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  opgebouwd = r2(opgebouwd);
+
+  // Opgenomen ADV
   var opgenomen = 0;
   state.afwezigheden.filter(function(a) {
     return a.persoon_id === persoonId && a.reden === 'adv';
@@ -1654,7 +1684,8 @@ function berekenADVUren(persoonId, jaar) {
     }
   });
   opgenomen = r2(opgenomen);
-  return { extraPerWeek: extraPerWeek, werkweken: werkweken, opgebouwd: opgebouwd, opgenomen: opgenomen, resterend: r2(opgebouwd - opgenomen) };
+
+  return { feitelijkPerWeek: feitelijkPerWeek, extraPerWeek: r2(feitelijkPerWeek - contract), opgebouwd: opgebouwd, opgenomen: opgenomen, resterend: r2(opgebouwd - opgenomen) };
 }
 
 function renderSaldoBalk(opgenomen, totaal, kleur) {
@@ -1702,12 +1733,11 @@ function renderUrenOverzicht() {
       var vak = berekenVakantieUren(p.id, jaar, ovs);
       var adv = berekenADVUren(p.id, jaar);
       var contract = parseFloat(p.contract_uren_per_week) || 0;
-      var feitelijk = parseFloat(p.feitelijk_uren_per_week) || 0;
 
       // Contract info
       if (contract > 0) {
         var infoStr = contract + 'u/week contract';
-        if (feitelijk > contract) infoStr += ' · ' + feitelijk + 'u/week feitelijk (+' + r2(feitelijk - contract) + 'u ADV-opbouw)';
+        if (adv) infoStr += ' · ' + adv.feitelijkPerWeek + 'u/week feitelijk (weekrooster) · +' + adv.extraPerWeek + 'u ADV-opbouw op gewerkte dagen';
         html += '<div style="font-size:12px;color:#6B7280;margin-bottom:10px">📋 ' + infoStr + '</div>';
       } else {
         html += '<div style="font-size:12px;color:#F59E0B;margin-bottom:10px">⚠️ Stel contracturen in via 👥 Personeel om automatisch te berekenen.</div>';
@@ -1727,8 +1757,8 @@ function renderUrenOverzicht() {
         html += renderSaldoBalk(adv.opgenomen, adv.opgebouwd, adv.resterend < 0 ? '#EF4444' : '#7C3AED');
         html += renderSaldoRij('', adv.opgenomen, adv.opgebouwd, adv.resterend);
         html += '</div>';
-      } else if (!p.is_zzper && feitelijk <= contract && contract > 0) {
-        html += '<div style="font-size:12px;color:#6B7280">⏱️ Geen ADV-opbouw (feitelijke uren ≤ contracturen)</div>';
+      } else if (!p.is_zzper && contract > 0) {
+        html += '<div style="font-size:12px;color:#6B7280">⏱️ Geen ADV-opbouw (weekroosteruren ≤ contracturen)</div>';
       }
     }
     html += '</div>';
