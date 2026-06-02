@@ -105,7 +105,7 @@ function getStaffForDay(dateStr) {
     return { ...p, aanwezig: ov ? ov.aanwezig !== false : true,
       start: (ov && ov.start_override) || rooster.start || '09:00',
       eind: (ov && ov.eind_override) || rooster.eind || '17:00',
-      keuringsuren: (ov && ov.keuringsuren_override != null) ? ov.keuringsuren_override : (p.is_keurmeester ? (rooster.keuringsuren || 4) : 0),
+      keuringsuren: (ov && ov.keuringsuren_override != null) ? ov.keuringsuren_override : (p.is_keurmeester ? (rooster.keuringsuren != null ? rooster.keuringsuren : 4) : 0),
     };
   }).filter(Boolean);
 }
@@ -758,7 +758,7 @@ async function saveDayOverrides(dateStr) {
     var rooster = p.weekrooster && p.weekrooster[dk];
     var origStart = rooster ? rooster.start : '09:00';
     var origEind = rooster ? rooster.eind : '17:00';
-    var origKeur = rooster ? rooster.keuringsuren : 4;
+    var origKeur = (rooster && rooster.keuringsuren != null) ? rooster.keuringsuren : 4;
     var newStart = startEl.value;
     var newEind = eindEl.value;
     var newKeur = keurEl ? parseFloat(keurEl.value) : null;
