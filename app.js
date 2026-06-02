@@ -175,6 +175,7 @@ function buildCalendar(jobs, days) {
       const job = jobQueue[qi]; const alreadyDone = scheduled[job.id] || 0;
       const remaining = job.geschatteUren - alreadyDone;
       if (remaining <= 0) { jobQueue.splice(qi, 1); continue; }
+      if (job.datumBinnen && d < job.datumBinnen) { qi++; continue; }
       const allocate = Math.min(remaining, free);
       entry.items.push({ job, hours: allocate, type: 'tussendoor' });
       entry.usedHours += allocate; free -= allocate;
