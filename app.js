@@ -264,6 +264,9 @@ function renderCalendar() {
       if (isToday) html += '<span class="badge badge-today">NU</span>';
       if (hasCapOverride) html += '<span class="badge badge-override">✎</span>';
       if (staffAbsent.length > 0) html += '<span class="badge badge-absent">' + staffAbsent.length + '×afw</span>';
+      var mmdd = dateStr.substring(5); // MM-DD
+      var jarigen = state.personeel.filter(function(p) { return p.geboortedatum && p.geboortedatum.substring(5) === mmdd; });
+      if (jarigen.length > 0) html += '<span class="badge" style="background:#FEF3C7;color:#92400E" title="' + jarigen.map(function(p){return p.naam;}).join(', ') + '">🎂</span>';
       html += '</div></div>';
 
       // ─── Capaciteitssectie (boven de personeelsbalkjes) ───
@@ -982,6 +985,8 @@ function renderEditPersoneelForm() {
     '<div class="toggle-row" style="margin-top:8px" onclick="window._editPerson.is_zzper = !window._editPerson.is_zzper; renderEditPersoneelForm();">' +
     '<div class="toggle-switch ' + (p.is_zzper ? 'on' : '') + '"><div class="toggle-dot"></div></div>' +
     '<span class="toggle-label">' + (p.is_zzper ? '🔑 ZZP\'er — standaard niet ingepland, per dag in te schakelen via de kalender' : 'Geen ZZP\'er') + '</span></div>' +
+    '<div class="field" style="margin-top:10px"><label>🎂 Verjaardag <span style="color:#6B7280;font-weight:400">(dag en maand, jaar niet zichtbaar)</span></label>' +
+    '<input type="date" class="input" style="max-width:180px" value="' + (p.geboortedatum || '') + '" onchange="window._editPerson.geboortedatum=this.value||null" /></div>' +
     (!p.is_zzper ? (
       '<div class="form-section"><div class="section-title">⏱️ Uren & verlof</div>' +
       '<div class="field"><label>Contracturen / week</label>' +
