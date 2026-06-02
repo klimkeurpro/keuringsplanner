@@ -177,3 +177,6 @@ ALTER TABLE afspraken ADD COLUMN IF NOT EXISTS personen_ids JSONB DEFAULT NULL;
 -- Voeg contracturen en feitelijke uren per week toe aan personeel (voor ADV-berekening)
 ALTER TABLE personeel ADD COLUMN IF NOT EXISTS contract_uren_per_week NUMERIC DEFAULT NULL;
 ALTER TABLE personeel ADD COLUMN IF NOT EXISTS feitelijk_uren_per_week NUMERIC DEFAULT NULL;
+
+-- Voeg geboortedatum toe aan personeel (voor verjaardagsweergave op kalender)
+ALTER TABLE personeel ADD COLUMN IF NOT EXISTS geboortedatum DATE DEFAULT NULL;
