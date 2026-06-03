@@ -354,7 +354,7 @@ function renderCalendar() {
 
             // Keuring blokken (voor keuringen die aan deze keurmeester zijn gekoppeld)
             state.jobs.filter(function(j) {
-              return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr;
+              return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr && j.status !== 'klaar' && j.status !== 'afgeleverd';
             }).forEach(function(job) {
               var kTijd = job.binnenkomstTijd || job.afspraakTijd || '';
               var kStart = kTijd ? timeToHours(kTijd) : effectiveStartTime;
@@ -1392,7 +1392,7 @@ function exportIcal() {
     if (ap.opmerkingen) lines.push('DESCRIPTION:' + esc(ap.opmerkingen));
     lines.push('END:VEVENT');
   });
-  state.jobs.filter(function(j) { return j.heeftAfspraak && j.afspraakDatum; }).forEach(function(job) {
+  state.jobs.filter(function(j) { return j.heeftAfspraak && j.afspraakDatum && j.status !== 'klaar' && j.status !== 'afgeleverd'; }).forEach(function(job) {
     var startMin = Math.round(timeToHours(job.afspraakTijd || '09:00') * 60);
     var endMin = startMin + Math.round((job.geschatteUren || 1) * 60);
     var endTijd = String(Math.floor(endMin / 60)).padStart(2, '0') + ':' + String(endMin % 60).padStart(2, '0');
