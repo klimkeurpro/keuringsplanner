@@ -100,7 +100,14 @@ function getStaffForDay(dateStr) {
         keuringsuren: (ov && ov.keuringsuren_override != null) ? ov.keuringsuren_override : (p.is_keurmeester ? 4 : 0),
       };
     }
-    if (!rooster || !rooster.actief) return null;
+    if (!rooster || !rooster.actief) {
+      // Toch tonen als er een expliciete aanwezig:true override is voor deze dag
+      if (ov && ov.aanwezig === true) return { ...p, aanwezig: true,
+        start: ov.start_override || '09:00', eind: ov.eind_override || '17:00',
+        keuringsuren: ov.keuringsuren_override != null ? ov.keuringsuren_override : (p.is_keurmeester ? 4 : 0),
+      };
+      return null;
+    }
     if (isPersonAfwezig(p.id, dateStr)) return { ...p, aanwezig: false, reden: getAfwezigheidReden(p.id, dateStr), start: rooster.start, eind: rooster.eind, keuringsuren: 0 };
     return { ...p, aanwezig: ov ? ov.aanwezig !== false : true,
       start: (ov && ov.start_override) || rooster.start || '09:00',
