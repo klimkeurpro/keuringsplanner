@@ -124,19 +124,25 @@ function getTotalAfspraakHoursForDay(dateStr) {
 }
 
 function capacityForDay(dateStr) {
+  var base;
   const capOv = getCapOverrideForDay(dateStr);
-  if (capOv && capOv.capaciteit_override != null) return capOv.capaciteit_override;
-  // If no personeel configured, fall back to old template
-  if (state.personeel.length === 0) {
+  if (capOv && capOv.capaciteit_override != null) {
+    base = capOv.capaciteit_override;
+  } else if (state.personeel.length === 0) {
     const dk = dayKey(dateStr);
-    return dk ? (state.settings.template[dk] || 0) : 0;
-  }
-  return getStaffForDay(dateStr).filter(s => s.aanwezig && s.is_keurmeester).reduce(function(sum, s) {
-    var afspraakUren = getAfsprakenForPersonDay(s.id, dateStr).reduce(function(t, a) {
-      return t + Math.max(0, timeToHours(a.eind_tijd) - timeToHours(a.start_tijd));
+    base = dk ? (state.settings.template[dk] || 0) : 0;
+  } else {
+    base = getStaffForDay(dateStr).filter(s => s.aanwezig && s.is_keurmeester).reduce(function(sum, s) {
+      var afspraakUren = getAfsprakenForPersonDay(s.id, dateStr).reduce(function(t, a) {
+        return t + Math.max(0, timeToHours(a.eind_tijd) - timeToHours(a.start_tijd));
+      }, 0);
+      return sum + Math.max(0, (s.keuringsuren || 0) - afspraakUren);
     }, 0);
-    return sum + Math.max(0, (s.keuringsuren || 0) - afspraakUren);
-  }, 0);
+  }
+  var opLocatieUren = state.jobs.filter(function(j) {
+    return j.opLocatie && j.afspraakDatum === dateStr && j.status !== 'klaar' && j.status !== 'afgeleverd' && !j.gearchiveerd;
+  }).reduce(function(sum, j) { return sum + (j.geschatteUren || 0); }, 0);
+  return base + opLocatieUren;
 }
 
 // Calendar scheduling
@@ -286,7 +292,7 @@ function renderCalendar() {
           if (pct < 0.5) return;
           var cls = item.overflow ? 'cap-seg-overflow' : 'cap-seg-keuring';
           var warning = item.overflow ? '⚠ ' : '';
-          html += '<div class="cap-seg ' + cls + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u" onclick="openJobModal(' + item.job.id + ')">' + warning + escHtml(item.job.klant) + '</div>';
+          html += '<div class="cap-seg ' + cls + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (item.job.opLocatie ? ' · 🚗 op locatie' : '') + '" onclick="openJobModal(' + item.job.id + ')">' + warning + (item.job.opLocatie ? '🚗 ' : '') + escHtml(item.job.klant) + '</div>';
         });
         // Grijze segmenten: wachtlijst keuringen
         tItems.forEach(function(item) {
@@ -364,7 +370,7 @@ function renderCalendar() {
               if (kE <= kS) return;
               var kTop = (kS / barDurH) * 100;
               var kH = ((kE - kS) / barDurH) * 100;
-              html += '<div class="keuring-blok" style="top:' + kTop.toFixed(1) + '%;height:' + kH.toFixed(1) + '%;background:' + s.kleur + '" title="Keuring: ' + escHtml(job.klant) + '" onclick="openJobModal(' + job.id + ')">' + escHtml(job.klant) + '</div>';
+              html += '<div class="keuring-blok" style="top:' + kTop.toFixed(1) + '%;height:' + kH.toFixed(1) + '%;background:' + s.kleur + '" title="' + (job.opLocatie ? '🚗 Op locatie: ' : 'Keuring: ') + escHtml(job.klant) + '" onclick="openJobModal(' + job.id + ')">' + (job.opLocatie ? '🚗 ' : '') + escHtml(job.klant) + '</div>';
             });
           }
           html += '</div>';
@@ -1125,6 +1131,7 @@ function syncFormToModal() {
   if (el('jf-status')) form.status = el('jf-status').value;
   if (el('jf-notities')) form.notities = el('jf-notities').value;
   if (el('jf-persoon')) form.persoonId = el('jf-persoon').value ? parseInt(el('jf-persoon').value) : null;
+  if (el('jf-op-locatie')) form.opLocatie = el('jf-op-locatie').checked;
   form.heeftAfspraak = !!(form.retourDatum);
   form.afspraakDatum = form.retourDatum || '';
   document.querySelectorAll('.set-type-input').forEach(function(inp) { form.aantallen[inp.dataset.typeId] = parseInt(inp.value) || 0; });
@@ -1142,7 +1149,7 @@ function openJobModal(id, isArchief) {
   var form = job ? JSON.parse(JSON.stringify(job)) : { klant:'',klantNummer:'',telefoon:'',omschrijving:'',aantallen:emptyAantallen,
     heeftAfspraak:false,status:'intake',geschatteUren:0,afspraakDatum:'',afspraakTijd:'',
     binnenkomstWijze:'',binnenkomstDatum:todayStr(),binnenkomstTijd:nowTimeStr(),
-    retourWijze:'',retourDatum:'',retourTijd:'',afkeurBeleid:'',afkeurToelichting:'',contactLog:[],notities:'' };
+    retourWijze:'',retourDatum:'',retourTijd:'',afkeurBeleid:'',afkeurToelichting:'',contactLog:[],notities:'',opLocatie:false };
   if (job) { form.aantallen = Object.assign({}, emptyAantallen, form.aantallen || {}); form.contactLog = form.contactLog ? form.contactLog.slice() : []; }
   window._modalForm = form; window._modalIsNew = isNew; window._modalIsArchief = !!isArchief;
   renderJobModalContent();
@@ -1203,14 +1210,17 @@ function renderJobModalContent(skipSync) {
     '<div><div class="sub-label">AFLEVERING KLANT</div><input class="input mb-4" id="jf-ret-wijze" value="' + escHtml(form.retourWijze) + '" placeholder="Klant haalt op, post, wij brengen..." />' +
     '<div class="form-grid-2"><input type="date" class="input" id="jf-ret-datum" value="' + (form.retourDatum || '') + '" /><input type="time" class="input" id="jf-ret-tijd" value="' + (form.retourTijd || '') + '" /></div>' +
     '<div class="deadline-hint">' + deadlineHint + '</div></div></div>' +
+    '<div class="field" style="margin-top:10px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">' +
+    '<input type="checkbox" id="jf-op-locatie"' + (form.opLocatie ? ' checked' : '') + ' onchange="syncFormToModal();renderJobModalContent(true)" />' +
+    '🚗 Op locatie — keuring vindt plaats bij klant ter plaatse</label></div>' +
     (state.personeel.filter(function(p){return p.is_keurmeester;}).length > 0
-      ? '<div class="field" style="margin-top:8px"><label>🔧 Toegewezen keurmeester (optioneel)</label>' +
+      ? '<div class="field" style="margin-top:6px"><label>🔧 Toegewezen keurmeester' + (form.opLocatie ? ' <span style="color:#dc2626">*</span>' : ' (optioneel)') + '</label>' +
         '<select class="input" id="jf-persoon">' +
         '<option value="">— Niet toegewezen</option>' +
         state.personeel.filter(function(p){return p.is_keurmeester;}).map(function(p){
           return '<option value="' + p.id + '"' + (form.persoonId === p.id ? ' selected' : '') + '>' + escHtml(p.naam) + '</option>';
         }).join('') +
-        '</select><div class="hint-text" style="margin-top:4px">Wanneer gekoppeld verschijnt de keuring als blok op de binnenkomsttijd in de tijdsbalk</div></div>'
+        '</select><div class="hint-text" style="margin-top:4px">' + (form.opLocatie ? '🚗 Uren tellen als extra keurcapaciteit voor de dag van de afleverdatum' : 'Wanneer gekoppeld verschijnt de keuring als blok op de binnenkomsttijd in de tijdsbalk') + '</div></div>'
       : '') +
     '</div>';
   if (!isNew) {
@@ -1309,6 +1319,8 @@ function collectFormData() {
 async function submitJobForm() {
   var data = collectFormData();
   if (!data.klant.trim()) { showToast('Klantnaam is verplicht!', 'error'); return; }
+  if (data.opLocatie && !data.persoonId) { showToast('Op locatie: selecteer een keurmeester', 'error'); return; }
+  if (data.opLocatie && !data.retourDatum) { showToast('Op locatie: vul de afleverdatum in', 'error'); return; }
   var saved = await saveKlus(data);
   if (saved) {
     if (window._modalIsNew) state.jobs.push(saved);

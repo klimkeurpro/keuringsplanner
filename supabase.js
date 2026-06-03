@@ -68,6 +68,7 @@ function mapKlusFromDB(row) {
     notities: row.notities || '', gearchiveerd: row.gearchiveerd || false,
     aantallenWerkelijk: row.aantallen_werkelijk || null,
     persoonId: row.persoon_id || null,
+    opLocatie: row.op_locatie || false,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -88,6 +89,7 @@ function mapKlusToDB(klus) {
     gearchiveerd: klus.gearchiveerd || false,
     aantallen_werkelijk: klus.aantallenWerkelijk || null,
     persoon_id: klus.persoonId || null,
+    op_locatie: !!klus.opLocatie,
   };
 }
 

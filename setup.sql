@@ -180,3 +180,6 @@ ALTER TABLE personeel ADD COLUMN IF NOT EXISTS feitelijk_uren_per_week NUMERIC D
 
 -- Voeg geboortedatum toe aan personeel (voor verjaardagsweergave op kalender)
 ALTER TABLE personeel ADD COLUMN IF NOT EXISTS geboortedatum DATE DEFAULT NULL;
+
+-- Voeg op_locatie toe aan klussen (keuring vindt plaats bij klant ter plaatse)
+ALTER TABLE klussen ADD COLUMN IF NOT EXISTS op_locatie BOOLEAN NOT NULL DEFAULT FALSE;
