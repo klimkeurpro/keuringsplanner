@@ -352,7 +352,7 @@ function renderCalendar() {
 
           html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + bgAlpha + ';border-color:' + s.kleur + '">';
           html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Klik om afspraak te plannen" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>';
-          if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + '">' + s.keuringsuren + 'u keur.</span>';
+          if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + ';cursor:pointer" title="Nieuwe keuring inplannen voor ' + escHtml(s.naam) + '" onclick="event.stopPropagation();openNieuweKeuringVanafKalender(\'' + dateStr + '\',' + s.id + ')">' + s.keuringsuren + 'u keur.</span>';
 
           // Losse afspraak blokken
           if (barDurH > 0) {
@@ -1147,6 +1147,21 @@ function syncFormToModal() {
     if (!form.aantallenWerkelijk) form.aantallenWerkelijk = {};
     werkelijkInputs.forEach(function(inp) { form.aantallenWerkelijk[inp.dataset.typeId] = parseInt(inp.value) || 0; });
   }
+}
+
+function openNieuweKeuringVanafKalender(dateStr, persoonId) {
+  var emptyAantallen = {}; state.settings.setTypes.forEach(function(st) { emptyAantallen[st.id] = 0; });
+  window._modalForm = {
+    klant:'', klantNummer:'', telefoon:'', omschrijving:'', aantallen: emptyAantallen,
+    heeftAfspraak: false, status:'intake', geschatteUren: 0,
+    afspraakDatum: '', afspraakTijd: '',
+    binnenkomstWijze:'', binnenkomstDatum: dateStr, binnenkomstTijd: nowTimeStr(),
+    retourWijze:'', retourDatum:'', retourTijd:'',
+    afkeurBeleid:'', afkeurToelichting:'', contactLog:[], notities:'', opLocatie: false,
+    persoonId: persoonId || null,
+  };
+  window._modalIsNew = true; window._modalIsArchief = false;
+  renderJobModalContent();
 }
 
 function openJobModal(id, isArchief) {
