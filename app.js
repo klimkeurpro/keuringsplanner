@@ -273,7 +273,7 @@ function renderCalendar() {
 
       // ─── Header ───
       html += '<div class="cal-day-header"><div class="cal-day-num"><span class="day-number">' + date.getDate() + '</span>';
-      if (date.getDate() <= 7 || wi === 0) html += '<span class="day-month">' + date.toLocaleDateString('nl-NL', { month: 'short' }) + '</span>';
+      html += '<span class="day-month">' + date.toLocaleDateString('nl-NL', { month: 'short' }) + '</span>';
       html += '</div><div class="cal-day-badges">';
       if (isToday) html += '<span class="badge badge-today">NU</span>';
       if (hasCapOverride) html += '<span class="badge badge-override">✎</span>';
