@@ -116,7 +116,10 @@
     .cal-day-info .over { color: var(--danger); font-weight: 800; }
 
     /* ─── Personeelsbalkjes sectie (los onder capaciteit) ─── */
-    .cal-staff-area { flex: 1; position: relative; min-height: 160px; overflow: hidden; }
+    .cal-staff-area { flex: 1; position: relative; min-height: 160px; overflow: hidden; display: flex; flex-direction: column; }
+    .staff-name-row { display: flex; flex-shrink: 0; background: var(--bg); border-bottom: 1px solid var(--border); position: relative; z-index: 2; height: 28px; }
+    .staff-name-cell { position: absolute; height: 28px; padding: 2px 3px; display: flex; flex-direction: column; justify-content: center; border-left: 3px solid; overflow: hidden; }
+    .staff-bars-timeline { flex: 1; position: relative; min-height: 130px; overflow: hidden; }
     .staff-bar-bg { position: absolute; border-left: 3px solid; border-radius: 0 4px 4px 0; padding: 2px 3px; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; opacity: 0.9; }
     .staff-bar-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
     .staff-bar-cap { font-size: 8px; opacity: 0.7; }

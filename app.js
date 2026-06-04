@@ -327,12 +327,24 @@ function renderCalendar() {
       html += '<div class="cal-staff-area" onclick="event.stopPropagation()">';
       if (staffPresent.length > 0) {
         var barW = Math.floor(100 / staffPresent.length);
+
+        // Vaste naamrij boven de tijdslijn
+        html += '<div class="staff-name-row">';
+        staffPresent.forEach(function(s, si) {
+          html += '<div class="staff-name-cell" style="width:' + barW + '%;left:' + (si * barW) + '%;border-color:' + s.kleur + '">' +
+            '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Afspraak plannen voor ' + escHtml(s.naam) + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>' +
+            (s.is_keurmeester ? '<span class="staff-bar-cap" style="color:' + s.kleur + ';cursor:pointer" title="Nieuwe keuring voor ' + escHtml(s.naam) + '" onclick="event.stopPropagation();openNieuweKeuringVanafKalender(\'' + dateStr + '\',' + s.id + ')">' + s.keuringsuren + 'u keur.</span>' : '') +
+            '</div>';
+        });
+        html += '</div>';
+
+        // Tijdslijn balkjes
+        html += '<div class="staff-bars-timeline">';
         staffPresent.forEach(function(s, si) {
           var startH = timeToHours(s.start) - HOUR_START;
           var endH = timeToHours(s.eind) - HOUR_START;
           var persAfspraken = getAfsprakenForPersonDay(s.id, dateStr);
 
-          // Extend bar to cover afspraken that fall outside normal working hours
           var effectiveStartH = persAfspraken.reduce(function(min, ap) {
             return Math.min(min, timeToHours(ap.start_tijd) - HOUR_START);
           }, startH);
@@ -351,8 +363,6 @@ function renderCalendar() {
           var bgAlpha = persAfspraken.length > 0 ? '28' : '12';
 
           html += '<div class="staff-bar-bg" style="left:' + leftPct + '%;width:' + barW + '%;top:' + topPct + '%;height:' + heightPct + '%;background:' + s.kleur + bgAlpha + ';border-color:' + s.kleur + '">';
-          html += '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Klik om afspraak te plannen" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>';
-          if (s.is_keurmeester) html += '<span class="staff-bar-cap" style="color:' + s.kleur + ';cursor:pointer" title="Nieuwe keuring inplannen voor ' + escHtml(s.naam) + '" onclick="event.stopPropagation();openNieuweKeuringVanafKalender(\'' + dateStr + '\',' + s.id + ')">' + s.keuringsuren + 'u keur.</span>';
 
           // Losse afspraak blokken
           if (barDurH > 0) {
@@ -382,6 +392,7 @@ function renderCalendar() {
           }
           html += '</div>';
         });
+        html += '</div>'; // staff-bars-timeline
       } else {
         html += '<div class="staff-area-hint">geen personeel</div>';
       }
