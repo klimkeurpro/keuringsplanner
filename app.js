@@ -272,7 +272,9 @@ function renderCalendar() {
       html += '<div class="cal-day ' + (isToday ? 'today' : '') + ' ' + (isPast ? 'past' : '') + '" onclick="openDayOverride(\'' + dateStr + '\')">';
 
       // ─── Header ───
-      html += '<div class="cal-day-header"><div class="cal-day-num"><span class="day-number">' + date.getDate() + '</span>';
+      html += '<div class="cal-day-header"><div class="cal-day-num">' +
+        '<span class="day-abbr">' + DAY_NAMES_FULL[date.getDay() - 1].substring(0, 2).toUpperCase() + '</span>' +
+        '<span class="day-number">' + date.getDate() + '</span>';
       html += '<span class="day-month">' + date.toLocaleDateString('nl-NL', { month: 'short' }) + '</span>';
       html += '</div><div class="cal-day-badges">';
       if (isToday) html += '<span class="badge badge-today">NU</span>';
