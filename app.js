@@ -1362,6 +1362,8 @@ async function submitJobForm() {
     else if (window._modalIsArchief) state.archief = state.archief.map(function(j) { return j.id === saved.id ? saved : j; });
     else state.jobs = state.jobs.map(function(j) { return j.id === saved.id ? saved : j; });
     closeModal(); render(); showToast(window._modalIsNew ? 'Keuring geregistreerd! ✓' : 'Keuring opgeslagen ✓');
+  } else {
+    showToast('Opslaan mislukt, probeer opnieuw', 'error');
   }
 }
 

@@ -183,3 +183,6 @@ ALTER TABLE personeel ADD COLUMN IF NOT EXISTS geboortedatum DATE DEFAULT NULL;
 
 -- Voeg op_locatie toe aan klussen (keuring vindt plaats bij klant ter plaatse)
 ALTER TABLE klussen ADD COLUMN IF NOT EXISTS op_locatie BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Voeg persoon_id toe aan klussen (toegewezen keurmeester)
+ALTER TABLE klussen ADD COLUMN IF NOT EXISTS persoon_id BIGINT REFERENCES personeel(id) DEFAULT NULL;
