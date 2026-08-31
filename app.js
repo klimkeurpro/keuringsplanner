@@ -160,6 +160,26 @@ function capacityForDay(dateStr) {
   return base + opLocatieUren;
 }
 
+// Hoeveel uur er nog te gaan is bij een keuring die in behandeling is.
+// Je vult niets in: de app schat het uit de capaciteit van de dagen die sinds
+// de startdag verstreken zijn. Ben je drie dagen bezig, dan is er drie dagen
+// capaciteit verbruikt. De startdag zelf telt nog niet mee -- je zet de kaart
+// meestal pas om als je er al een deel van de dag mee bezig bent.
+// Klopt de schatting niet, sleep de kaart dan terug naar Ingepland: dan
+// vervalt de startdag en staat de volle schatting er weer.
+function resterendeUren(job, today) {
+  if (!job.gestartOp || job.gestartOp >= today) return job.geschatteUren;
+  let verbruikt = 0;
+  const d = parseDate(job.gestartOp);
+  const eind = parseDate(today);
+  while (d < eind) {
+    const ds = toDateStr(d);
+    if (d.getDay() >= 1 && d.getDay() <= 5) verbruikt += capacityForDay(ds);
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(0, job.geschatteUren - verbruikt);
+}
+
 // Calendar scheduling
 function buildCalendar(jobs, days) {
   const cal = {};
@@ -167,7 +187,25 @@ function buildCalendar(jobs, days) {
   const today = todayStr();
   const futureDays = days.filter(d => d >= today);
   const activeJobs = jobs.filter(j => !j.gearchiveerd && !isAfgerond(j));
-  const afspraakJobs = activeJobs.filter(j => j.heeftAfspraak && j.afspraakDatum).sort((a, b) => a.afspraakDatum.localeCompare(b.afspraakDatum));
+
+  // Eerste ronde: keuringen waar iemand mee bezig is. Die krijgen voorrang en
+  // een aflopende teller, zodat een grote set niet elke dag opnieuw met zijn
+  // volle uren vooraan gaat staan en de rest vooruit duwt.
+  const bezigJobs = activeJobs.filter(j => j.status === 'in_behandeling');
+  bezigJobs.forEach(job => {
+    let remaining = resterendeUren(job, today);
+    for (const d of futureDays) {
+      if (remaining <= 0) break;
+      const entry = cal[d]; if (!entry) continue;
+      const free = entry.capacity - entry.usedHours; if (free <= 0) continue;
+      const allocate = Math.min(remaining, free);
+      entry.items.push({ job, hours: allocate, type: 'afspraak', bezig: true });
+      entry.usedHours += allocate; remaining -= allocate;
+    }
+  });
+
+  const restJobs = activeJobs.filter(j => j.status !== 'in_behandeling');
+  const afspraakJobs = restJobs.filter(j => j.heeftAfspraak && j.afspraakDatum).sort((a, b) => a.afspraakDatum.localeCompare(b.afspraakDatum));
   afspraakJobs.forEach(job => {
     let remaining = job.geschatteUren;
     const startFrom = job.datumBinnen && job.datumBinnen >= today ? job.datumBinnen : today;
@@ -202,7 +240,7 @@ function buildCalendar(jobs, days) {
       if (target) { target.items.push({ job, hours: remaining, type: 'afspraak', overflow: true }); target.usedHours += remaining; }
     }
   });
-  const tussendoorJobs = activeJobs.filter(j => !j.heeftAfspraak).sort((a, b) => (a.datumBinnen || '').localeCompare(b.datumBinnen || ''));
+  const tussendoorJobs = restJobs.filter(j => !j.heeftAfspraak).sort((a, b) => (a.datumBinnen || '').localeCompare(b.datumBinnen || ''));
   const jobQueue = [...tussendoorJobs]; const scheduled = {};
   for (const d of futureDays) {
     if (jobQueue.length === 0) break;
@@ -706,7 +744,13 @@ async function switchTab(tab) {
 }
 async function changeJobStatus(id, newStatus) {
   var job = state.jobs.find(function(j) { return j.id === id; }); if (!job) return;
-  job.status = newStatus; render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
+  job.status = newStatus;
+  // Startdag vastleggen zodra de keuring in behandeling gaat -- daarmee rekent
+  // de planner uit hoeveel uur er nog te gaan is. Terugslepen naar Ingepland
+  // wist de startdag weer, zodat de volle schatting terugkomt.
+  if (newStatus === 'in_behandeling') { if (!job.gestartOp) job.gestartOp = todayStr(); }
+  else if (newStatus === 'ingepland') { job.gestartOp = ''; }
+  render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
 }
 async function doDeleteJob(id) {
   if (!confirm('Weet je zeker dat je deze keuring wilt verwijderen?')) return;

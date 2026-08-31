@@ -69,6 +69,7 @@ function mapKlusFromDB(row) {
     aantallenWerkelijk: row.aantallen_werkelijk || null,
     persoonId: row.persoon_id || null,
     opLocatie: row.op_locatie || false,
+    gestartOp: row.gestart_op || '',
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -90,6 +91,7 @@ function mapKlusToDB(klus) {
     aantallen_werkelijk: klus.aantallenWerkelijk || null,
     persoon_id: klus.persoonId || null,
     op_locatie: !!klus.opLocatie,
+    gestart_op: klus.gestartOp || null,
   };
 }
 
