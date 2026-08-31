@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS klussen (
   omschrijving TEXT DEFAULT '',
   aantallen JSONB NOT NULL DEFAULT '{}',
   heeft_afspraak BOOLEAN NOT NULL DEFAULT FALSE,
-  status TEXT NOT NULL DEFAULT 'intake' CHECK (status IN ('intake','in_behandeling','klaar','afgeleverd')),
+  status TEXT NOT NULL DEFAULT 'ingepland' CHECK (status IN ('ingepland','in_behandeling','klaar')),
   geschatte_uren NUMERIC(5,1) NOT NULL DEFAULT 1,
   afspraak_datum DATE,
   afspraak_tijd TEXT DEFAULT '',
@@ -183,3 +183,26 @@ ALTER TABLE personeel ADD COLUMN IF NOT EXISTS geboortedatum DATE DEFAULT NULL;
 
 -- Voeg op_locatie toe aan klussen (keuring vindt plaats bij klant ter plaatse)
 ALTER TABLE klussen ADD COLUMN IF NOT EXISTS op_locatie BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ============================================
+-- Kanban van vier naar drie stappen (2026-08-31)
+--
+-- 'intake' heet nu 'ingepland'. De kolom 'afgeleverd' vervalt: "terug bij de
+-- klant" is geen wachtkamer meer maar de knop Retour op Klaar, die meteen
+-- archiveert. Bestaande afgeleverde keuringen gaan daarom naar het archief.
+-- "Verwacht / binnen" blijft een badge op de kaart, afgeleid uit datum_binnen.
+-- ============================================
+
+ALTER TABLE klussen DROP CONSTRAINT IF EXISTS klussen_status_check;
+
+UPDATE klussen SET status = 'ingepland' WHERE status = 'intake';
+UPDATE klussen SET gearchiveerd = TRUE, status = 'klaar' WHERE status = 'afgeleverd';
+
+ALTER TABLE klussen ALTER COLUMN status SET DEFAULT 'ingepland';
+ALTER TABLE klussen ADD CONSTRAINT klussen_status_check
+  CHECK (status IN ('ingepland','in_behandeling','klaar'));
+
+-- Startdatum van "in behandeling". Hiermee rekent de planner uit hoeveel uur er
+-- nog te gaan is, zodat een grote set niet elke dag de hele planning vooruit
+-- duwt om op de laatste dag ineens terug te springen.
+ALTER TABLE klussen ADD COLUMN IF NOT EXISTS gestart_op DATE DEFAULT NULL;

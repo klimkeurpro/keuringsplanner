@@ -51,14 +51,14 @@ async function saveKlus(klus) {
 
 async function deleteKlus(id) { const { error } = await db.from('klussen').delete().eq('id', id); return !error; }
 async function archiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: true }).eq('id', id); return !error; }
-async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'intake' }).eq('id', id); return !error; }
+async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'ingepland' }).eq('id', id); return !error; }
 
 function mapKlusFromDB(row) {
   return {
     id: row.id, klant: row.klant || '', klantNummer: row.klant_nummer || '',
     telefoon: row.telefoon || '', omschrijving: row.omschrijving || '',
     aantallen: row.aantallen || {}, heeftAfspraak: row.heeft_afspraak || false,
-    status: row.status || 'intake', geschatteUren: parseFloat(row.geschatte_uren) || 1,
+    status: row.status || 'ingepland', geschatteUren: parseFloat(row.geschatte_uren) || 1,
     afspraakDatum: row.afspraak_datum || '', afspraakTijd: row.afspraak_tijd || '',
     binnenkomstWijze: row.binnenkomst_wijze || '', binnenkomstDatum: row.binnenkomst_datum || '',
     binnenkomstTijd: row.binnenkomst_tijd || '', retourWijze: row.retour_wijze || '',
@@ -78,7 +78,7 @@ function mapKlusToDB(klus) {
     id: klus.id || undefined, klant: klus.klant, klant_nummer: klus.klantNummer || '',
     telefoon: klus.telefoon || '', omschrijving: klus.omschrijving || '',
     aantallen: klus.aantallen || {}, heeft_afspraak: klus.heeftAfspraak || false,
-    status: klus.status || 'intake', geschatte_uren: parseFloat(klus.geschatteUren) || 1,
+    status: klus.status || 'ingepland', geschatte_uren: parseFloat(klus.geschatteUren) || 1,
     afspraak_datum: klus.afspraakDatum || null, afspraak_tijd: klus.afspraakTijd || '',
     binnenkomst_wijze: klus.binnenkomstWijze || '', binnenkomst_datum: klus.binnenkomstDatum || null,
     binnenkomst_tijd: klus.binnenkomstTijd || '', retour_wijze: klus.retourWijze || '',

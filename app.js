@@ -2,10 +2,18 @@
 // KeuringsPlanner - Applicatie v2
 // ============================================
 
-const STATUSES = ['intake', 'in_behandeling', 'klaar', 'afgeleverd'];
-const STATUS_LABELS = { intake: 'Intake', in_behandeling: 'In behandeling', klaar: 'Klaar', afgeleverd: 'Afgeleverd' };
-const STATUS_ICONS = { intake: '📥', in_behandeling: '🔧', klaar: '✅', afgeleverd: '📦' };
-const STATUS_COLORS = { intake: '#D97706', in_behandeling: '#7C3AED', klaar: '#059669', afgeleverd: '#6B7280' };
+// Drie stappen. "Verwacht / binnen" is geen kolom maar een badge op de kaart,
+// afgeleid uit datumBinnen. Retour is geen kolom maar een knop op Klaar die
+// meteen archiveert -- dekt opgehaald, opgestuurd en teruggegeven op locatie.
+const STATUSES = ['ingepland', 'in_behandeling', 'klaar'];
+const STATUS_LABELS = { ingepland: 'Ingepland', in_behandeling: 'In behandeling', klaar: 'Klaar' };
+const STATUS_ICONS = { ingepland: '📥', in_behandeling: '🔧', klaar: '✅' };
+const STATUS_COLORS = { ingepland: '#D97706', in_behandeling: '#7C3AED', klaar: '#059669' };
+
+// Gekeurd: telt niet meer mee in planning, capaciteit of agenda-export. Stond
+// op vijf plekken los uitgeschreven; daardoor liep het uit de pas zodra de
+// statussen wijzigden.
+function isAfgerond(job) { return job.status === 'klaar'; }
 const DAY_NAMES = ['ma', 'di', 'wo', 'do', 'vr'];
 const DAY_NAMES_FULL = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag'];
 const WARNING_DAYS = 8;
@@ -147,7 +155,7 @@ function capacityForDay(dateStr) {
     }, 0);
   }
   var opLocatieUren = state.jobs.filter(function(j) {
-    return j.opLocatie && j.afspraakDatum === dateStr && j.status !== 'klaar' && j.status !== 'afgeleverd' && !j.gearchiveerd;
+    return j.opLocatie && j.afspraakDatum === dateStr && !isAfgerond(j) && !j.gearchiveerd;
   }).reduce(function(sum, j) { return sum + (j.geschatteUren || 0); }, 0);
   return base + opLocatieUren;
 }
@@ -158,7 +166,7 @@ function buildCalendar(jobs, days) {
   days.forEach(d => { cal[d] = { date: d, capacity: capacityForDay(d), staff: getStaffForDay(d), items: [], usedHours: 0 }; });
   const today = todayStr();
   const futureDays = days.filter(d => d >= today);
-  const activeJobs = jobs.filter(j => !j.gearchiveerd && j.status !== 'afgeleverd' && j.status !== 'klaar');
+  const activeJobs = jobs.filter(j => !j.gearchiveerd && !isAfgerond(j));
   const afspraakJobs = activeJobs.filter(j => j.heeftAfspraak && j.afspraakDatum).sort((a, b) => a.afspraakDatum.localeCompare(b.afspraakDatum));
   afspraakJobs.forEach(job => {
     let remaining = job.geschatteUren;
@@ -235,7 +243,7 @@ function closeModal() { const m = document.querySelector('.modal-overlay'); if (
 
 // Stats Bar
 function renderStatsBar() {
-  const active = state.jobs.filter(function(j) { return j.status !== 'afgeleverd' && j.status !== 'klaar'; });
+  const active = state.jobs.filter(function(j) { return !isAfgerond(j); });
   const met = active.filter(function(j) { return j.heeftAfspraak; }).length;
   const zonder = active.filter(function(j) { return !j.heeftAfspraak; }).length;
   const uren = active.reduce(function(s, j) { return s + (j.geschatteUren || 0); }, 0);
@@ -395,7 +403,7 @@ function renderCalendar() {
 
             // Keuring blokken (voor keuringen die aan deze keurmeester zijn gekoppeld)
             state.jobs.filter(function(j) {
-              return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr && j.status !== 'klaar' && j.status !== 'afgeleverd';
+              return j.persoonId === s.id && j.heeftAfspraak && j.afspraakDatum === dateStr && !isAfgerond(j);
             }).forEach(function(job) {
               var kTijd = job.binnenkomstTijd || job.afspraakTijd || '';
               var kStart = kTijd ? timeToHours(kTijd) : effectiveStartTime;
@@ -450,8 +458,8 @@ function renderKanban() {
         ((job.contactLog || []).length > 0 ? '<span>📞' + job.contactLog.length + '</span>' : '') + '</div>' +
         '<div class="kanban-card-actions" onclick="event.stopPropagation()">' +
         (si > 0 ? '<button class="btn-sm" onclick="changeJobStatus(' + job.id + ',\'' + STATUSES[si - 1] + '\')">← ' + STATUS_LABELS[STATUSES[si - 1]] + '</button>' : '') +
-        (si < 3 ? '<button class="btn-sm btn-status" style="--btn-color:' + STATUS_COLORS[STATUSES[si + 1]] + '" onclick="changeJobStatus(' + job.id + ',\'' + STATUSES[si + 1] + '\')">' + STATUS_LABELS[STATUSES[si + 1]] + ' →</button>' : '') +
-        (status === 'afgeleverd' ? '<button class="btn-sm btn-archive" onclick="doArchiveerKlus(' + job.id + ')">📁 Archiveer</button>' : '') +
+        (si < STATUSES.length - 1 ? '<button class="btn-sm btn-status" style="--btn-color:' + STATUS_COLORS[STATUSES[si + 1]] + '" onclick="changeJobStatus(' + job.id + ',\'' + STATUSES[si + 1] + '\')">' + STATUS_LABELS[STATUSES[si + 1]] + ' →</button>' : '') +
+        (status === 'klaar' ? '<button class="btn-sm btn-archive" onclick="doArchiveerKlus(' + job.id + ')" title="Set is terug bij de klant — verplaatst de keuring naar het archief">📦 Retour</button>' : '') +
         '<button class="btn-sm btn-delete" onclick="doDeleteJob(' + job.id + ')">🗑</button></div></div>';
     });
     if (col.length === 0) html += '<div class="kanban-empty">Geen keuringen</div>';
@@ -714,7 +722,7 @@ async function doArchiveerKlus(id) {
 async function doDeArchiveer(id) {
   if (await deArchiveerKlus(id)) {
     var job = state.archief.find(function(j) { return j.id === id; });
-    if (job) { job.gearchiveerd = false; job.status = 'intake'; state.archief = state.archief.filter(function(j) { return j.id !== id; }); state.jobs.push(job); }
+    if (job) { job.gearchiveerd = false; job.status = 'ingepland'; state.archief = state.archief.filter(function(j) { return j.id !== id; }); state.jobs.push(job); }
     render(); showToast('Keuring teruggezet naar Intake');
   }
 }
@@ -1182,7 +1190,7 @@ function openNieuweKeuringVanafKalender(dateStr, persoonId) {
   var emptyAantallen = {}; state.settings.setTypes.forEach(function(st) { emptyAantallen[st.id] = 0; });
   window._modalForm = {
     klant:'', klantNummer:'', telefoon:'', omschrijving:'', aantallen: emptyAantallen,
-    heeftAfspraak: false, status:'intake', geschatteUren: 0,
+    heeftAfspraak: false, status:'ingepland', geschatteUren: 0,
     afspraakDatum: '', afspraakTijd: '',
     binnenkomstWijze:'', binnenkomstDatum: dateStr, binnenkomstTijd: nowTimeStr(),
     retourWijze:'', retourDatum:'', retourTijd:'',
@@ -1198,7 +1206,7 @@ function openJobModal(id, isArchief) {
   var job = isNew ? null : (isArchief ? state.archief : state.jobs).find(function(j) { return j.id === id; });
   var emptyAantallen = {}; state.settings.setTypes.forEach(function(st) { emptyAantallen[st.id] = 0; });
   var form = job ? JSON.parse(JSON.stringify(job)) : { klant:'',klantNummer:'',telefoon:'',omschrijving:'',aantallen:emptyAantallen,
-    heeftAfspraak:false,status:'intake',geschatteUren:0,afspraakDatum:'',afspraakTijd:'',
+    heeftAfspraak:false,status:'ingepland',geschatteUren:0,afspraakDatum:'',afspraakTijd:'',
     binnenkomstWijze:'',binnenkomstDatum:todayStr(),binnenkomstTijd:nowTimeStr(),
     retourWijze:'',retourDatum:'',retourTijd:'',afkeurBeleid:'',afkeurToelichting:'',contactLog:[],notities:'',opLocatie:false };
   if (job) { form.aantallen = Object.assign({}, emptyAantallen, form.aantallen || {}); form.contactLog = form.contactLog ? form.contactLog.slice() : []; }
@@ -1455,7 +1463,7 @@ function exportIcal() {
     if (ap.opmerkingen) lines.push('DESCRIPTION:' + esc(ap.opmerkingen));
     lines.push('END:VEVENT');
   });
-  state.jobs.filter(function(j) { return j.heeftAfspraak && j.afspraakDatum && j.status !== 'klaar' && j.status !== 'afgeleverd'; }).forEach(function(job) {
+  state.jobs.filter(function(j) { return j.heeftAfspraak && j.afspraakDatum && !isAfgerond(j); }).forEach(function(job) {
     var startMin = Math.round(timeToHours(job.afspraakTijd || '09:00') * 60);
     var endMin = startMin + Math.round((job.geschatteUren || 1) * 60);
     var endTijd = String(Math.floor(endMin / 60)).padStart(2, '0') + ':' + String(endMin % 60).padStart(2, '0');
@@ -1629,7 +1637,7 @@ function nieuweKlusVanVorige(id, bron) {
   window._modalForm = {
     klant: vorige.klant, klantNummer: vorige.klantNummer, telefoon: vorige.telefoon,
     omschrijving: vorige.omschrijving, aantallen: aantallen, heeftAfspraak: false,
-    status: 'intake', geschatteUren: geschatteUren, afspraakDatum: '', afspraakTijd: '',
+    status: 'ingepland', geschatteUren: geschatteUren, afspraakDatum: '', afspraakTijd: '',
     binnenkomstWijze: vorige.binnenkomstWijze, binnenkomstDatum: todayStr(), binnenkomstTijd: nowTimeStr(),
     retourWijze: vorige.retourWijze, retourDatum: '', retourTijd: '',
     afkeurBeleid: vorige.afkeurBeleid, afkeurToelichting: vorige.afkeurToelichting,
