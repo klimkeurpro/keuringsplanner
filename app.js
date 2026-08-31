@@ -441,7 +441,7 @@ function renderKanban() {
       var isFuture = job.datumBinnen && job.datumBinnen > todayStr();
       html += '<div class="kanban-card ' + (isFuture ? 'border-future' : job.heeftAfspraak ? 'border-accent' : isW ? 'border-danger' : 'border-muted') + '" onclick="openJobModal(' + job.id + ')">' +
         '<div class="kanban-card-top"><div class="kanban-card-info">' +
-        '<div class="kanban-card-name">' + (isW ? '⚠ ' : '') + escHtml(job.klant) + '</div>' +
+        '<div class="kanban-card-name"' + (job.opLocatie ? ' title="Keuring op locatie bij de klant"' : '') + '>' + (isW ? '⚠ ' : '') + (job.opLocatie ? '🚗 ' : '') + escHtml(job.klant) + '</div>' +
         '<div class="kanban-card-desc">' + escHtml(job.omschrijving) + '</div></div>' +
         '<span class="kanban-badge ' + (isFuture ? 'badge-future' : job.heeftAfspraak ? 'badge-afspraak' : 'badge-tussendoor') + '">' +
         (isFuture ? '📦 Verwacht ' + formatDateShort(job.datumBinnen) : job.heeftAfspraak ? '📅 Aflevering ' + formatDateShort(job.afspraakDatum) : 'Wachtlijst') + '</span></div>' +
