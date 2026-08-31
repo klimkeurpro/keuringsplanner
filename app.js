@@ -164,6 +164,22 @@ function buildCalendar(jobs, days) {
     let remaining = job.geschatteUren;
     const startFrom = job.datumBinnen && job.datumBinnen >= today ? job.datumBinnen : today;
     const deadline = job.afspraakDatum;
+    // Afleverdatum al verstreken: de keuring hoort op zijn eigen dag te blijven
+    // staan. Zonder deze tak viel hij door naar de overflow-regel onderaan:
+    // futureDays bevat alleen vandaag en later, dus elke dag is > deadline en
+    // de lus breekt meteen af; cal[deadline] bestaat niet (die dag ligt buiten
+    // het venster) en dan landde de keuring op de laatste dag van het zichtbare
+    // venster -- wat eruitzag alsof hij vanzelf een maand vooruit werd gepland.
+    // Valt de eigen dag buiten het venster, dan hoort hij hier simpelweg niet
+    // in beeld; de kanban blijft hem gewoon tonen.
+    if (deadline < today) {
+      const eigenDag = cal[deadline];
+      if (eigenDag) {
+        eigenDag.items.push({ job, hours: remaining, type: 'afspraak', verstreken: true });
+        eigenDag.usedHours += remaining;
+      }
+      return;
+    }
     for (const d of futureDays) {
       if (d < startFrom || remaining <= 0) continue;
       if (d > deadline) break;
@@ -299,9 +315,9 @@ function renderCalendar() {
         aItems.forEach(function(item) {
           var pct = Math.min((item.hours / entry.capacity) * 100, 100);
           if (pct < 0.5) return;
-          var cls = item.overflow ? 'cap-seg-overflow' : 'cap-seg-keuring';
-          var warning = item.overflow ? '⚠ ' : '';
-          html += '<div class="cap-seg ' + cls + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (item.job.opLocatie ? ' · 🚗 op locatie' : '') + '" onclick="openJobModal(' + item.job.id + ')">' + warning + (item.job.opLocatie ? '🚗 ' : '') + escHtml(item.job.klant) + '</div>';
+          var cls = (item.overflow || item.verstreken) ? 'cap-seg-overflow' : 'cap-seg-keuring';
+          var warning = (item.overflow || item.verstreken) ? '⚠ ' : '';
+          html += '<div class="cap-seg ' + cls + '" style="width:' + pct.toFixed(1) + '%" title="' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (item.job.opLocatie ? ' · 🚗 op locatie' : '') + (item.verstreken ? ' · ⚠ afleverdatum verstreken' : '') + '" onclick="openJobModal(' + item.job.id + ')">' + warning + (item.job.opLocatie ? '🚗 ' : '') + escHtml(item.job.klant) + '</div>';
         });
         // Grijze segmenten: wachtlijst keuringen
         tItems.forEach(function(item) {
