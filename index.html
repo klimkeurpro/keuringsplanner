@@ -374,5 +374,17 @@
   <script src="config.js"></script>
   <script src="supabase.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Service worker registreren. Zonder dit draaide sw.js nooit: het bestand
+    // stond er wel, maar niemand riep register() aan. Gevolg: geen offline en
+    // een wankele "installeer als app" in Chrome.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function (err) {
+          console.warn('Service worker registratie mislukt:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
