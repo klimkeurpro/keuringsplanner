@@ -1764,23 +1764,29 @@ function getNLFeestdagenMetNaam(jaar) {
   // Koningsdag is 27 april, maar valt die op zondag dan wordt het 26 april.
   var kd = new Date(jaar, 3, 27);
   if (kd.getDay() === 0) kd = new Date(jaar, 3, 26);
+  // Bevrijdingsdag is hier alleen een vrije dag in een lustrumjaar. In de
+  // andere jaren blijft hij wel in het overzicht staan, maar telt hij als
+  // gewone werkdag mee in de capaciteit.
+  var lustrum = jaar % 5 === 0;
   return [
     { d: new Date(jaar, 0, 1),   naam: 'Nieuwjaarsdag' },
     { d: paasPlus(-2),           naam: 'Goede Vrijdag' },
     { d: pasen,                  naam: '1e Paasdag' },
     { d: paasPlus(1),            naam: '2e Paasdag' },
     { d: kd,                     naam: 'Koningsdag' },
-    { d: new Date(jaar, 4, 5),   naam: 'Bevrijdingsdag' },
+    { d: new Date(jaar, 4, 5),   naam: 'Bevrijdingsdag', vrij: lustrum },
     { d: paasPlus(39),           naam: 'Hemelvaartsdag' },
     { d: paasPlus(49),           naam: '1e Pinksterdag' },
     { d: paasPlus(50),           naam: '2e Pinksterdag' },
     { d: new Date(jaar, 11, 25), naam: '1e Kerstdag' },
     { d: new Date(jaar, 11, 26), naam: '2e Kerstdag' },
-  ].map(function(f) { return { datum: toDateStr(f.d), naam: f.naam }; })
+  ].map(function(f) { return { datum: toDateStr(f.d), naam: f.naam, vrij: f.vrij !== false }; })
    .sort(function(a, b) { return a.datum.localeCompare(b.datum); });
 }
+// Alleen de dagen waarop niet gewerkt wordt -- dit is wat de planning en de
+// urenberekening gebruiken.
 function getNLFeestdagen(jaar) {
-  return getNLFeestdagenMetNaam(jaar).map(function(f) { return f.datum; });
+  return getNLFeestdagenMetNaam(jaar).filter(function(f) { return f.vrij; }).map(function(f) { return f.datum; });
 }
 function isFeestdag(dateStr, feestdagen) {
   return feestdagen.indexOf(dateStr) !== -1;
@@ -1987,10 +1993,11 @@ function renderUrenOverzicht() {
     var dagNaam = DAG_NL[d.getDay()];
     var label = d.getDate() + ' ' + maandNL[d.getMonth()] + ' (' + dagNaam + ')';
     var isWerkdag = d.getDay() >= 1 && d.getDay() <= 5;
-    html += '<div style="font-size:12px;padding:3px 0;display:flex;gap:6px">' +
+    html += '<div style="font-size:12px;padding:3px 0;display:flex;gap:6px' + (!f.vrij ? ';opacity:0.6' : '') + '">' +
       '<span style="color:#6B7280;min-width:80px">' + label + '</span>' +
-      '<span>' + f.naam + '</span>' +
-      (!isWerkdag ? '<span style="color:#9CA3AF;font-size:10px">(weekend)</span>' : '') +
+      '<span' + (!f.vrij ? ' style="color:#9CA3AF"' : '') + '>' + f.naam + '</span>' +
+      (!f.vrij ? '<span style="color:#9CA3AF;font-size:10px">(geen vrije dag)</span>'
+               : !isWerkdag ? '<span style="color:#9CA3AF;font-size:10px">(weekend)</span>' : '') +
       '</div>';
   });
   html += '</div></div>';
