@@ -2031,6 +2031,10 @@ var _geabonneerd = false;
 async function verwerkSessie(session) {
   if (!session) {
     // Uitgelogd of sessie verlopen: alles uit het geheugen, terug naar login.
+    // Eerst een eventueel open venster sluiten. Dat hangt aan document.body en
+    // niet aan #app, dus render() ruimt het niet op -- na uitloggen vanuit
+    // Instellingen bleef het scherm anders over het inlogscherm heen staan.
+    closeModal();
     _dataGeladen = false;
     state.ingelogd = false; state.gebruikerEmail = '';
     state.jobs = []; state.archief = []; state.todos = [];
