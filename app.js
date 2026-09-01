@@ -776,9 +776,20 @@ async function switchTab(tab) {
 }
 async function changeJobStatus(id, newStatus) {
   var job = state.jobs.find(function(j) { return j.id === id; }); if (!job) return;
+  // De kaart verschuift meteen zodat het klikken vlot voelt, maar wordt
+  // teruggezet als het opslaan niet lukt. Anders toont het bord een kolom
+  // waar de keuring in de database niet staat, en zie je dat pas de volgende
+  // keer dat je de app opent.
+  var vorige = { status: job.status, gestartOp: job.gestartOp, gekeurdOp: job.gekeurdOp };
   job.status = newStatus;
   pasStatusDatumsAan(job);
-  render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
+  render();
+  if (!(await saveKlus(job))) {
+    job.status = vorige.status; job.gestartOp = vorige.gestartOp; job.gekeurdOp = vorige.gekeurdOp;
+    render();  // meldDbFout heeft de melding al getoond
+    return;
+  }
+  showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
 }
 async function doDeleteJob(id) {
   if (!confirm('Weet je zeker dat je deze keuring wilt verwijderen?')) return;

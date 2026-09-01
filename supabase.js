@@ -13,20 +13,47 @@ function initSupabase() {
   return true;
 }
 
+// Eén plek voor mislukte database-acties. Tot nu toe verdween zo'n fout in de
+// console en deed de app alsof er niets aan de hand was, terwijl er niets
+// opgeslagen werd. Sinds het inloggen verplicht is voelt een verlopen sessie
+// precies zo, dus die krijgt een eigen tekst.
+var _laatsteDbFout = { tekst: '', tijd: 0 };
+function meldDbFout(wat, error) {
+  console.error(wat + ' mislukt:', error);
+  var code = (error && (error.code || error.status)) || '';
+  var msg = String((error && error.message) || '');
+  var tekst;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    tekst = 'Geen internet — ' + wat.toLowerCase() + ' is niet gelukt.';
+  } else if (code === 401 || code === 403 || code === 'PGRST301' || /jwt|token|expired|not authenticated/i.test(msg)) {
+    tekst = 'Je sessie is verlopen. Log opnieuw in — dit is niet opgeslagen.';
+  } else {
+    tekst = wat + ' is niet gelukt. Probeer het opnieuw.';
+  }
+  // Bij het opstarten mislukken meerdere acties tegelijk; niet zes keer
+  // dezelfde melding tonen.
+  var nu = Date.now();
+  if (tekst !== _laatsteDbFout.tekst || nu - _laatsteDbFout.tijd > 5000) {
+    _laatsteDbFout = { tekst: tekst, tijd: nu };
+    if (typeof showToast === 'function') showToast(tekst, 'error');
+  }
+  return null;
+}
+
 // ─── KLUSSEN ───
 
 async function fetchKlussen(inclusiefArchief = false) {
   let query = db.from('klussen').select('*').order('created_at', { ascending: false });
   if (!inclusiefArchief) query = query.eq('gearchiveerd', false);
   const { data, error } = await query;
-  if (error) { console.error('Fout bij ophalen klussen:', error); return []; }
+  if (error) { meldDbFout('Keuringen ophalen', error); return []; }
   return data.map(mapKlusFromDB);
 }
 
 async function fetchArchief(zoekterm = '') {
   let query = db.from('klussen').select('*').eq('gearchiveerd', true).order('updated_at', { ascending: false });
   const { data, error } = await query;
-  if (error) { console.error('Fout bij ophalen archief:', error); return []; }
+  if (error) { meldDbFout('Archief ophalen', error); return []; }
   let results = data.map(mapKlusFromDB);
   if (zoekterm.trim()) {
     const z = zoekterm.toLowerCase();
@@ -39,19 +66,19 @@ async function saveKlus(klus) {
   const dbData = mapKlusToDB(klus);
   if (klus.id) {
     const { data, error } = await db.from('klussen').update(dbData).eq('id', klus.id).select().single();
-    if (error) { console.error('Fout bij opslaan klus:', error); return null; }
+    if (error) { meldDbFout('Keuring opslaan', error); return null; }
     return mapKlusFromDB(data);
   } else {
     delete dbData.id;
     const { data, error } = await db.from('klussen').insert(dbData).select().single();
-    if (error) { console.error('Fout bij aanmaken klus:', error); return null; }
+    if (error) { meldDbFout('Keuring aanmaken', error); return null; }
     return mapKlusFromDB(data);
   }
 }
 
-async function deleteKlus(id) { const { error } = await db.from('klussen').delete().eq('id', id); return !error; }
-async function archiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: true }).eq('id', id); return !error; }
-async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'ingepland' }).eq('id', id); return !error; }
+async function deleteKlus(id) { const { error } = await db.from('klussen').delete().eq('id', id); if (error) meldDbFout('Keuring verwijderen', error); return !error; }
+async function archiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: true }).eq('id', id); if (error) meldDbFout('Archiveren', error); return !error; }
+async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'ingepland' }).eq('id', id); if (error) meldDbFout('Terugzetten uit archief', error); return !error; }
 
 function mapKlusFromDB(row) {
   return {
@@ -101,7 +128,7 @@ function mapKlusToDB(klus) {
 
 async function fetchTodos() {
   const { data, error } = await db.from('todos').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('Fout bij ophalen todos:', error); return []; }
+  if (error) { meldDbFout('Taken ophalen', error); return []; }
   return data;
 }
 
@@ -111,7 +138,7 @@ async function saveTodo(todo) {
       tekst: todo.tekst, ruimte: todo.ruimte, persoon: todo.persoon,
       prioriteit: todo.prioriteit, klaar: todo.klaar,
     }).eq('id', todo.id).select().single();
-    if (error) { console.error('Fout bij opslaan todo:', error); return null; }
+    if (error) { meldDbFout('Taak opslaan', error); return null; }
     return data;
   } else {
     const { data, error } = await db.from('todos').insert({
@@ -119,18 +146,18 @@ async function saveTodo(todo) {
       prioriteit: todo.prioriteit || 'normaal', klaar: false,
       datum: todo.datum || todayStr(),
     }).select().single();
-    if (error) { console.error('Fout bij aanmaken todo:', error); return null; }
+    if (error) { meldDbFout('Taak aanmaken', error); return null; }
     return data;
   }
 }
 
-async function deleteTodo(id) { const { error } = await db.from('todos').delete().eq('id', id); return !error; }
+async function deleteTodo(id) { const { error } = await db.from('todos').delete().eq('id', id); if (error) meldDbFout('Taak verwijderen', error); return !error; }
 
 // ─── INSTELLINGEN ───
 
 async function fetchInstellingen() {
   const { data, error } = await db.from('instellingen').select('*').eq('id', 'global').single();
-  if (error) { console.error('Fout bij ophalen instellingen:', error); return null; }
+  if (error) { meldDbFout('Instellingen ophalen', error); return null; }
   return { template: data.week_template, setTypes: data.set_types, ruimtes: data.ruimtes, personen: data.personen, dagOverrides: data.dag_overrides };
 }
 
@@ -139,6 +166,7 @@ async function saveInstellingen(inst) {
     week_template: inst.template, set_types: inst.setTypes,
     ruimtes: inst.ruimtes, personen: inst.personen, dag_overrides: inst.dagOverrides || {},
   }).eq('id', 'global');
+  if (error) meldDbFout('Instellingen opslaan', error);
   return !error;
 }
 
@@ -146,7 +174,7 @@ async function saveInstellingen(inst) {
 
 async function fetchPersoneel() {
   const { data, error } = await db.from('personeel').select('*').eq('actief', true).order('naam');
-  if (error) { console.error('Fout bij ophalen personeel:', error); return []; }
+  if (error) { meldDbFout('Personeel ophalen', error); return []; }
   return data;
 }
 
@@ -154,11 +182,11 @@ async function savePersoneelslid(p) {
   const row = { naam: p.naam, kleur: p.kleur, is_keurmeester: p.is_keurmeester, is_zzper: p.is_zzper || false, weekrooster: p.weekrooster, actief: p.actief !== false, vakantie_uren_per_jaar: p.vakantie_uren_per_jaar ?? null, contract_uren_per_week: p.contract_uren_per_week ?? null, feitelijk_uren_per_week: p.feitelijk_uren_per_week ?? null, geboortedatum: p.geboortedatum ?? null };
   if (p.id) {
     const { data, error } = await db.from('personeel').update(row).eq('id', p.id).select().single();
-    if (error) { console.error('Fout bij opslaan personeelslid:', error); return null; }
+    if (error) { meldDbFout('Personeelslid opslaan', error); return null; }
     return data;
   } else {
     const { data, error } = await db.from('personeel').insert(row).select().single();
-    if (error) { console.error('Fout bij aanmaken personeelslid:', error); return null; }
+    if (error) { meldDbFout('Personeelslid aanmaken', error); return null; }
     return data;
   }
 }
@@ -172,7 +200,7 @@ async function deletePersoneelslid(id) {
 
 async function fetchAfwezigheden() {
   const { data, error } = await db.from('afwezigheden').select('*').order('van_datum');
-  if (error) { console.error('Fout bij ophalen afwezigheden:', error); return []; }
+  if (error) { meldDbFout('Afwezigheid ophalen', error); return []; }
   return data;
 }
 
@@ -180,22 +208,22 @@ async function saveAfwezigheid(a) {
   const row = { persoon_id: a.persoon_id, van_datum: a.van_datum, tot_datum: a.tot_datum, reden: a.reden, notitie: a.notitie || '' };
   if (a.id) {
     const { data, error } = await db.from('afwezigheden').update(row).eq('id', a.id).select().single();
-    if (error) { console.error('Fout bij opslaan afwezigheid:', error); return null; }
+    if (error) { meldDbFout('Afwezigheid opslaan', error); return null; }
     return data;
   } else {
     const { data, error } = await db.from('afwezigheden').insert(row).select().single();
-    if (error) { console.error('Fout bij aanmaken afwezigheid:', error); return null; }
+    if (error) { meldDbFout('Afwezigheid aanmaken', error); return null; }
     return data;
   }
 }
 
-async function deleteAfwezigheid(id) { const { error } = await db.from('afwezigheden').delete().eq('id', id); return !error; }
+async function deleteAfwezigheid(id) { const { error } = await db.from('afwezigheden').delete().eq('id', id); if (error) meldDbFout('Afwezigheid verwijderen', error); return !error; }
 
 // ─── DAG OVERRIDES ───
 
 async function fetchDagOverrides(vanDatum, totDatum) {
   const { data, error } = await db.from('dag_overrides').select('*').gte('datum', vanDatum).lte('datum', totDatum);
-  if (error) { console.error('Fout bij ophalen dag overrides:', error); return []; }
+  if (error) { meldDbFout('Dagaanpassingen ophalen', error); return []; }
   return data;
 }
 
@@ -206,17 +234,17 @@ async function saveDagOverride(ov) {
     eind_override: ov.eind_override || null, keuringsuren_override: ov.keuringsuren_override ?? null,
     capaciteit_override: ov.capaciteit_override ?? null, reden: ov.reden || null,
   }, { onConflict: 'datum,persoon_id' }).select().single();
-  if (error) { console.error('Fout bij opslaan dag override:', error); return null; }
+  if (error) { meldDbFout('Dagaanpassing opslaan', error); return null; }
   return data;
 }
 
-async function deleteDagOverride(id) { const { error } = await db.from('dag_overrides').delete().eq('id', id); return !error; }
+async function deleteDagOverride(id) { const { error } = await db.from('dag_overrides').delete().eq('id', id); if (error) meldDbFout('Dagaanpassing verwijderen', error); return !error; }
 
 async function fetchVakantieOverrides(jaar) {
   const { data, error } = await db.from('dag_overrides').select('*')
     .eq('reden', 'vakantie').gte('datum', jaar + '-01-01').lte('datum', jaar + '-12-31')
     .not('persoon_id', 'is', null);
-  if (error) { console.error('Fout bij ophalen vakantie overrides:', error); return []; }
+  if (error) { meldDbFout('Vakantiegegevens ophalen', error); return []; }
   return data;
 }
 
@@ -224,22 +252,22 @@ async function fetchVakantieOverrides(jaar) {
 
 async function fetchAfspraken(vanDatum, totDatum) {
   const { data, error } = await db.from('afspraken').select('*').gte('datum', vanDatum).lte('datum', totDatum).order('datum').order('start_tijd');
-  if (error) { console.error('Fout bij ophalen afspraken:', error); return []; }
+  if (error) { meldDbFout('Afspraken ophalen', error); return []; }
   return data;
 }
 async function saveAfspraak(a) {
   const row = { persoon_id: a.persoon_id, datum: a.datum, type: a.type || 'klant', titel: a.titel, start_tijd: a.start_tijd, eind_tijd: a.eind_tijd, opmerkingen: a.opmerkingen || '', personen_ids: a.personen_ids || null };
   if (a.id) {
     const { data, error } = await db.from('afspraken').update(row).eq('id', a.id).select().single();
-    if (error) { console.error('Fout bij opslaan afspraak:', error); return null; }
+    if (error) { meldDbFout('Afspraak opslaan', error); return null; }
     return data;
   } else {
     const { data, error } = await db.from('afspraken').insert(row).select().single();
-    if (error) { console.error('Fout bij aanmaken afspraak:', error); return null; }
+    if (error) { meldDbFout('Afspraak aanmaken', error); return null; }
     return data;
   }
 }
-async function deleteAfspraak(id) { const { error } = await db.from('afspraken').delete().eq('id', id); return !error; }
+async function deleteAfspraak(id) { const { error } = await db.from('afspraken').delete().eq('id', id); if (error) meldDbFout('Afspraak verwijderen', error); return !error; }
 
 // ─── FOTO'S ───
 
@@ -247,19 +275,19 @@ async function uploadFoto(klusId, file) {
   const ext = file.name.split('.').pop();
   const path = `klus_${klusId}/${Date.now()}.${ext}`;
   const { error: uploadError } = await db.storage.from('fotos').upload(path, file);
-  if (uploadError) { console.error('Fout bij uploaden foto:', uploadError); return null; }
+  if (uploadError) { meldDbFout('Foto uploaden', uploadError); return null; }
   // Ondertekende URL in plaats van een publieke: de bucket staat niet meer
   // open voor iedereen. De link verloopt na een uur en wordt bij elke
   // fetchFotos opnieuw aangemaakt.
   const { data: urlData } = await db.storage.from('fotos').createSignedUrl(path, 3600);
   const { data, error } = await db.from('fotos').insert({ klus_id: klusId, bestandsnaam: file.name, storage_path: path, notitie: '' }).select().single();
-  if (error) { console.error('Fout bij opslaan foto record:', error); return null; }
+  if (error) { meldDbFout('Foto opslaan', error); return null; }
   return { ...data, url: urlData ? urlData.signedUrl : '' };
 }
 
 async function fetchFotos(klusId) {
   const { data, error } = await db.from('fotos').select('*').eq('klus_id', klusId).order('created_at', { ascending: true });
-  if (error) { console.error('Fout bij ophalen fotos:', error); return []; }
+  if (error) { meldDbFout("Foto's ophalen", error); return []; }
   const paden = data.map(f => f.storage_path);
   if (paden.length === 0) return [];
   const { data: urls } = await db.storage.from('fotos').createSignedUrls(paden, 3600);
