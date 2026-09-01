@@ -53,21 +53,11 @@ let state = {
     ruimtes: ['Showroom', 'Kantoor', 'Magazijn', 'Website'],
     personen: ['Arda'],
     dagOverrides: {},
-    wachtwoord: '',
   },
-  activeTab: 'kalender', weeksToShow: 6, kalenderOffset: 0, archiefZoek: '', loading: true, authenticated: false,
+  activeTab: 'kalender', weeksToShow: 6, kalenderOffset: 0, archiefZoek: '', loading: true, ingelogd: false, gebruikerEmail: '',
   vakantieOverrides: null, urenJaar: new Date().getFullYear(),
 };
 
-// Password hashing
-async function hashPassword(password) {
-  if (!password) return '';
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-function isHashed(value) { return /^[0-9a-f]{64}$/.test(value); }
 
 // Date helpers
 const toDateStr = (d) => d.toISOString().split('T')[0];
@@ -613,7 +603,7 @@ function renderArchief() {
 function render() {
   var app = document.getElementById('app');
   if (state.loading) { app.innerHTML = '<div class="loading"><div class="spinner"></div><p>KeuringsPlanner laden...</p></div>'; return; }
-  if (!state.authenticated && state.settings.wachtwoord) { renderPasswordScreen(); return; }
+  if (!state.ingelogd) { renderLoginScherm(); return; }
   var showStats = state.activeTab === 'kalender' || state.activeTab === 'kanban';
   var tabContent = '';
   switch (state.activeTab) {
@@ -657,35 +647,49 @@ function render() {
 }
 
 // Password screen
-function renderPasswordScreen() {
+function renderLoginScherm() {
   document.getElementById('app').innerHTML = '<div class="password-screen"><div class="password-box">' +
-    '<h1>⚙️ KeuringsPlanner</h1><p>Voer het wachtwoord in om verder te gaan</p>' +
-    '<input type="password" class="input" id="pw-input" placeholder="Wachtwoord..." onkeydown="if(event.key===\'Enter\') checkPassword()" />' +
-    '<button class="btn-primary full-width" onclick="checkPassword()" style="margin-top:10px">Inloggen</button>' +
-    '<div id="pw-error" class="pw-error"></div>' +
-    '<button class="btn-link" onclick="openWachtwoordVergeten()" style="margin-top:12px;background:none;border:none;color:#6B7280;font-size:13px;cursor:pointer;text-decoration:underline">Wachtwoord vergeten?</button>' +
+    '<h1>⚙️ KeuringsPlanner</h1><p>Log in om verder te gaan</p>' +
+    '<input type="email" class="input" id="login-email" placeholder="E-mailadres" autocomplete="username" style="margin-bottom:8px" onkeydown="if(event.key===\'Enter\') doLogin()" />' +
+    '<input type="password" class="input" id="login-ww" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key===\'Enter\') doLogin()" />' +
+    '<button class="btn-primary full-width" id="login-knop" onclick="doLogin()" style="margin-top:10px">Inloggen</button>' +
+    '<div id="login-fout" class="pw-error"></div>' +
+    '<button class="btn-link" onclick="doWachtwoordVergeten()" style="margin-top:12px;background:none;border:none;color:#6B7280;font-size:13px;cursor:pointer;text-decoration:underline">Wachtwoord vergeten?</button>' +
     '</div></div>';
-  setTimeout(function() { var el = document.getElementById('pw-input'); if (el) el.focus(); }, 100);
+  setTimeout(function() { var el = document.getElementById('login-email'); if (el) el.focus(); }, 100);
 }
-async function checkPassword() {
-  var input = (document.getElementById('pw-input') || {}).value;
-  var stored = state.settings.wachtwoord;
-  var match = false;
-  if (isHashed(stored)) {
-    match = (await hashPassword(input)) === stored;
-  } else {
-    // Backward compatibility: plain text stored — migrate to hash on success
-    match = input === stored;
-    if (match) {
-      var hashed = await hashPassword(input);
-      state.settings.wachtwoord = hashed;
-      state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __wachtwoord: hashed });
-      await saveInstellingen(state.settings);
-    }
+
+async function doLogin() {
+  var email = (document.getElementById('login-email') || {}).value || '';
+  var ww = (document.getElementById('login-ww') || {}).value || '';
+  var fout = document.getElementById('login-fout');
+  var knop = document.getElementById('login-knop');
+  if (!email.trim() || !ww) { if (fout) fout.textContent = 'Vul e-mailadres en wachtwoord in'; return; }
+  if (knop) { knop.disabled = true; knop.textContent = 'Inloggen...'; }
+  var res = await db.auth.signInWithPassword({ email: email.trim(), password: ww });
+  if (res.error) {
+    if (fout) fout.textContent = 'Inloggen mislukt: controleer e-mailadres en wachtwoord';
+    if (knop) { knop.disabled = false; knop.textContent = 'Inloggen'; }
+    return;
   }
-  if (match) {
-    state.authenticated = true; localStorage.setItem('kp_auth', 'true'); render();
-  } else { document.getElementById('pw-error').textContent = 'Onjuist wachtwoord'; }
+  // Verder gaat via onAuthStateChange -- niet hier data ophalen.
+}
+
+async function doLogout() {
+  if (!confirm('Uitloggen?')) return;
+  await db.auth.signOut();
+}
+
+async function doWachtwoordVergeten() {
+  var email = ((document.getElementById('login-email') || {}).value || '').trim();
+  if (!email) {
+    var fout = document.getElementById('login-fout');
+    if (fout) fout.textContent = 'Vul eerst je e-mailadres in, dan sturen we een herstelmail';
+    return;
+  }
+  var res = await db.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+  if (res.error) { showToast('Versturen mislukt', 'error'); return; }
+  showToast('Herstelmail verstuurd naar ' + email);
 }
 
 function openHandleiding() {
@@ -746,7 +750,7 @@ function openHandleiding() {
 
     s('⚙️ Instellingen') +
     li([
-      'Stel een <strong>wachtwoord</strong> in. Vergeten? Klik "Wachtwoord vergeten?" op het inlogscherm.',
+      'Inloggen gaat via een e-mailadres en wachtwoord. Vergeten? Klik "Wachtwoord vergeten?" op het inlogscherm, dan krijg je een herstelmail.',
       'Voeg set-types of ruimtes toe die bij jullie situatie passen.',
       '<strong>iCal export</strong>: download een .ics bestand met alle afspraken en keuringen, importeerbaar in Google Agenda, Outlook of Apple Agenda.',
     ]) +
@@ -756,27 +760,6 @@ function openHandleiding() {
 
     '</div>';
   openModal(html, true);
-}
-
-function openWachtwoordVergeten() {
-  var email = state.settings.email || '';
-  var sql = "UPDATE instellingen\nSET dag_overrides = dag_overrides - '__wachtwoord'\nWHERE id = 'global';";
-  var html = '<div class="modal-header"><h2>🔑 Wachtwoord vergeten</h2><button class="btn-close" onclick="closeModal()">✕</button></div>' +
-    '<div class="modal-body">' +
-    (email ? '<div class="form-section" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px"><p style="margin:0">Neem contact op met de beheerder:<br><strong><a href="mailto:' + escHtml(email) + '" style="color:#1D4ED8">' + escHtml(email) + '</a></strong></p></div>' : '') +
-    '<div class="form-section"><div class="section-title">Zelf resetten via Supabase</div>' +
-    '<p style="font-size:14px;color:#6B7280;margin-bottom:10px">Voer de volgende stappen uit:</p>' +
-    '<ol style="font-size:14px;color:#374151;line-height:1.8;padding-left:18px">' +
-    '<li>Ga naar <strong>supabase.com</strong> → jouw project</li>' +
-    '<li>Klik op <strong>SQL Editor</strong> → New query</li>' +
-    '<li>Plak onderstaande code en klik <strong>Run</strong></li>' +
-    '<li>Herlaad de app — je komt nu direct in de app</li>' +
-    '<li>Stel een nieuw wachtwoord in via <strong>⚙️ Instellingen</strong></li>' +
-    '</ol>' +
-    '<div style="background:#1E293B;color:#E2E8F0;font-family:monospace;font-size:13px;padding:12px 14px;border-radius:6px;margin-top:10px;white-space:pre">' + escHtml(sql) + '</div>' +
-    '<button class="btn-sm" style="margin-top:8px" onclick="navigator.clipboard&&navigator.clipboard.writeText(' + JSON.stringify(sql) + ').then(function(){showToast(\'Gekopieerd ✓\')})">📋 Kopieer SQL</button>' +
-    '</div></div>';
-  openModal(html);
 }
 
 // Actions
@@ -1522,7 +1505,7 @@ async function submitTodo(editId) {
 // Settings Modal
 function openSettingsModal() {
   window._settingsForm = { setTypes: state.settings.setTypes.map(function(s) { return Object.assign({}, s); }),
-    ruimtes: state.settings.ruimtes.slice(), wachtwoord: state.settings.wachtwoord || '', email: state.settings.email || '' };
+    ruimtes: state.settings.ruimtes.slice(), email: state.settings.email || '' };
   renderSettingsModal();
 }
 function exportIcal() {
@@ -1585,8 +1568,12 @@ function renderSettingsModal() {
     '<div class="form-section"><div class="section-title">🔒 Beveiliging</div>' +
     '<div class="field"><label>E-mailadres beheerder</label>' +
     '<input type="email" class="input" id="set-email" value="' + escHtml(f.email || '') + '" placeholder="info@bedrijf.nl" /></div>' +
-    '<div class="field"><label>Wachtwoord (leeg = geen wachtwoord' + (f.wachtwoord ? ', huidig wachtwoord blijft als leeg gelaten' : '') + ')</label>' +
-    '<input type="password" class="input" id="set-wachtwoord" value="" placeholder="' + (f.wachtwoord ? 'Nieuw wachtwoord (leeg = ongewijzigd)' : 'Stel een wachtwoord in...') + '" /></div></div></div>' +
+    '<div class="field"><label>Ingelogd als</label>' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+    '<span style="font-size:14px;color:#374151">' + escHtml(state.gebruikerEmail || '—') + '</span>' +
+    '<button class="btn-sm" onclick="doLogout()">Uitloggen</button></div>' +
+    '<div class="hint-text" style="margin-top:4px">Het wachtwoord beheer je in Supabase, niet meer hier. Vergeten? Gebruik "Wachtwoord vergeten?" op het inlogscherm.</div>' +
+    '</div></div></div>' +
     '<div class="form-section"><div class="section-title">📅 Google Agenda / iCal</div>' +
     '<p style="font-size:12px;color:var(--text-faint);margin:0 0 8px">Download een .ics bestand met alle afspraken en keuringen. Importeer dit in Google Agenda, Outlook of Apple Agenda.</p>' +
     '<button class="btn-secondary full-width" onclick="exportIcal()">⬇ Download kalender (.ics)</button></div></div>' +
@@ -1605,14 +1592,11 @@ function addSettRoom() {
   window._settingsForm.ruimtes.push(inp.value.trim()); renderSettingsModal();
 }
 async function saveSettingsModal() {
-  var wwInput = (document.getElementById('set-wachtwoord') || {}).value || '';
-  var ww = wwInput ? await hashPassword(wwInput) : (window._settingsForm.wachtwoord || '');
   var email = (document.getElementById('set-email') || {}).value || '';
   state.settings.setTypes = window._settingsForm.setTypes;
   state.settings.ruimtes = window._settingsForm.ruimtes;
-  state.settings.wachtwoord = ww;
   state.settings.email = email;
-  state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __wachtwoord: ww, __email: email });
+  state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __email: email });
   await saveInstellingen(state.settings);
   closeModal(); render(); showToast('Instellingen opgeslagen ✓');
 }
@@ -2029,20 +2013,58 @@ async function initApp() {
     document.getElementById('app').innerHTML = '<div class="error-state"><h2>⚠️ Supabase niet geconfigureerd</h2><p>Vul je Supabase URL en key in in <code>config.js</code></p></div>';
     return;
   }
+  // Auth-luisteraar. Binnen deze callback mag NIETS met supabase gebeuren: de
+  // interne auth-vergrendeling staat dan vast en elke query blijft daarop
+  // wachten, waardoor de app op "Laden..." blijft hangen. Vandaar het werk
+  // uitstellen tot buiten de callback-tick.
+  db.auth.onAuthStateChange(function(event, session) {
+    setTimeout(function() { verwerkSessie(session); }, 0);
+  });
+
+  var huidige = await db.auth.getSession();
+  await verwerkSessie(huidige.data ? huidige.data.session : null);
+}
+
+var _dataGeladen = false;
+var _geabonneerd = false;
+
+async function verwerkSessie(session) {
+  if (!session) {
+    // Uitgelogd of sessie verlopen: alles uit het geheugen, terug naar login.
+    _dataGeladen = false;
+    state.ingelogd = false; state.gebruikerEmail = '';
+    state.jobs = []; state.archief = []; state.todos = [];
+    state.personeel = []; state.afwezigheden = []; state.afspraken = []; state.dagOverrides = [];
+    state.loading = false; render();
+    return;
+  }
+  state.ingelogd = true;
+  state.gebruikerEmail = session.user ? session.user.email : '';
+  // getSession() en onAuthStateChange vuren allebei bij het opstarten; zonder
+  // deze vlag zou alles twee keer opgehaald worden.
+  if (_dataGeladen) { render(); return; }
+  _dataGeladen = true;
+  await laadAlleData();
+}
+
+async function laadAlleData() {
   state.loading = true; render();
   try {
     var results = await Promise.all([fetchInstellingen(), fetchKlussen(false), fetchArchief(), fetchTodos(), fetchPersoneel(), fetchAfwezigheden()]);
-    var inst = results[0]; if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; }
+    var inst = results[0]; if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; }
     state.jobs = results[1]; state.archief = results[2]; state.todos = results[3]; state.personeel = results[4]; state.afwezigheden = results[5];
     await reloadDagOverrides();
-    // Check saved auth
-    if (!state.settings.wachtwoord || localStorage.getItem('kp_auth') === 'true') state.authenticated = true;
   } catch (err) { console.error('Init error:', err); showToast('Fout bij laden data', 'error'); }
   state.loading = false; render();
+  // Maar één keer abonneren: na uitloggen en opnieuw inloggen draait deze
+  // functie nogmaals, en een tweede abonnement zou elke wijziging dubbel
+  // binnenhalen.
+  if (_geabonneerd) return;
+  _geabonneerd = true;
   subscribeToChanges(
     async function() { state.jobs = await fetchKlussen(false); state.archief = await fetchArchief(); render(); },
     async function() { state.todos = await fetchTodos(); render(); },
-    async function() { var inst = await fetchInstellingen(); if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.wachtwoord = (inst.dagOverrides && inst.dagOverrides.__wachtwoord) || ''; state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; } render(); },
+    async function() { var inst = await fetchInstellingen(); if (inst) { state.settings = Object.assign({}, state.settings, inst); state.settings.email = (inst.dagOverrides && inst.dagOverrides.__email) || ''; } render(); },
     async function() { state.personeel = await fetchPersoneel(); state.afwezigheden = await fetchAfwezigheden(); await reloadDagOverrides(); render(); }
   );
 }

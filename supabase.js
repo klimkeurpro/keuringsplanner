@@ -248,19 +248,24 @@ async function uploadFoto(klusId, file) {
   const path = `klus_${klusId}/${Date.now()}.${ext}`;
   const { error: uploadError } = await db.storage.from('fotos').upload(path, file);
   if (uploadError) { console.error('Fout bij uploaden foto:', uploadError); return null; }
-  const { data: urlData } = db.storage.from('fotos').getPublicUrl(path);
+  // Ondertekende URL in plaats van een publieke: de bucket staat niet meer
+  // open voor iedereen. De link verloopt na een uur en wordt bij elke
+  // fetchFotos opnieuw aangemaakt.
+  const { data: urlData } = await db.storage.from('fotos').createSignedUrl(path, 3600);
   const { data, error } = await db.from('fotos').insert({ klus_id: klusId, bestandsnaam: file.name, storage_path: path, notitie: '' }).select().single();
   if (error) { console.error('Fout bij opslaan foto record:', error); return null; }
-  return { ...data, url: urlData.publicUrl };
+  return { ...data, url: urlData ? urlData.signedUrl : '' };
 }
 
 async function fetchFotos(klusId) {
   const { data, error } = await db.from('fotos').select('*').eq('klus_id', klusId).order('created_at', { ascending: true });
   if (error) { console.error('Fout bij ophalen fotos:', error); return []; }
-  return data.map(f => {
-    const { data: urlData } = db.storage.from('fotos').getPublicUrl(f.storage_path);
-    return { ...f, url: urlData.publicUrl };
-  });
+  const paden = data.map(f => f.storage_path);
+  if (paden.length === 0) return [];
+  const { data: urls } = await db.storage.from('fotos').createSignedUrls(paden, 3600);
+  const perPad = {};
+  (urls || []).forEach(u => { if (u.path) perPad[u.path] = u.signedUrl; });
+  return data.map(f => ({ ...f, url: perPad[f.storage_path] || '' }));
 }
 
 async function deleteFoto(foto) {

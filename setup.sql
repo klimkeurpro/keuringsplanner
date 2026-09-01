@@ -211,3 +211,54 @@ ALTER TABLE klussen ADD COLUMN IF NOT EXISTS gestart_op DATE DEFAULT NULL;
 -- een kaart op Klaar komt. Hiermee is het archief een logboek en kan de
 -- kalender terugblikken op wat er wanneer gekeurd is.
 ALTER TABLE klussen ADD COLUMN IF NOT EXISTS gekeurd_op DATE DEFAULT NULL;
+
+-- ============================================
+-- TOEGANG DICHTZETTEN — voer dit als LAATSTE uit
+--
+-- Tot nu toe stonden alle policies op USING (true). Omdat de anon-key in de
+-- gedeployde app zit, kon iedereen die de site opende alle keuringen,
+-- personeelsgegevens en afwezigheid lezen, wijzigen en verwijderen. Het
+-- wachtwoordscherm hielp daar niet tegen: dat beschermde alleen de browser,
+-- niet de database.
+--
+-- LET OP: draai dit pas als het inloggen live staat en je gecontroleerd hebt
+-- dat je erin komt. Vanaf dit moment werkt de app niet meer zonder sessie.
+-- Maak eerst het account aan: Authentication -> Users -> Add user.
+-- ============================================
+
+DO $$
+DECLARE t text; p text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['klussen','todos','instellingen','fotos','personeel','afspraken','dag_overrides','afwezigheden']
+  LOOP
+    -- Bestaande policies weghalen, hoe ze ook heten.
+    FOR p IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = t
+    LOOP
+      EXECUTE format('DROP POLICY %I ON public.%I', p, t);
+    END LOOP;
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('CREATE POLICY "Alleen ingelogd" ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
+
+-- Foto-opslag: bucket dicht, alleen ingelogd erbij. De app gebruikt sinds deze
+-- wijziging ondertekende URL's in plaats van publieke.
+UPDATE storage.buckets SET public = FALSE WHERE id = 'fotos';
+
+DROP POLICY IF EXISTS "Iedereen mag fotos uploaden"   ON storage.objects;
+DROP POLICY IF EXISTS "Iedereen mag fotos bekijken"   ON storage.objects;
+DROP POLICY IF EXISTS "Iedereen mag fotos verwijderen" ON storage.objects;
+
+CREATE POLICY "Ingelogd mag fotos uploaden" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'fotos');
+CREATE POLICY "Ingelogd mag fotos bekijken" ON storage.objects
+  FOR SELECT TO authenticated USING (bucket_id = 'fotos');
+CREATE POLICY "Ingelogd mag fotos verwijderen" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'fotos');
+
+-- Het oude, zelfgebouwde wachtwoord is niet meer in gebruik.
+UPDATE instellingen SET dag_overrides = dag_overrides - '__wachtwoord' WHERE id = 'global';
+
+-- Controle: hier hoort niets meer te staan met roles = {public} of {anon}.
+SELECT tablename, policyname, roles FROM pg_policies
+WHERE schemaname = 'public' ORDER BY tablename;
