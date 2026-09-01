@@ -325,8 +325,7 @@ function renderStatsBar() {
 
 // Calendar Render
 function renderCalendar() {
-  var base = new Date(); base.setDate(base.getDate() + state.kalenderOffset * 7);
-  var startMonday = getMondayOfWeek(toDateStr(base));
+  var startMonday = zichtbareStartMaandag();
   var allDays = getWorkdays(startMonday, state.weeksToShow);
   // Archief meegeven voor de terugblik: gekeurde keuringen zijn gearchiveerd
   // en zitten dus niet in state.jobs. De planning zelf raakt dit niet -- die
@@ -631,18 +630,16 @@ function render() {
   }).join('');
   var weekPicker = '';
   if (state.activeTab === 'kalender') {
-    var navBase = new Date(); navBase.setDate(navBase.getDate() + state.kalenderOffset * 7);
-    var navMonday = getMondayOfWeek(toDateStr(navBase));
-    var navDate = parseDate(navMonday);
+    var navDate = parseDate(zichtbareStartMaandag());
     var maandNamen = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
     var navLabel = maandNamen[navDate.getMonth()] + ' ' + navDate.getFullYear();
     weekPicker = '<div class="week-picker" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-      '<button class="week-btn" onclick="state.kalenderOffset-=state.weeksToShow;render()" title="Vorige periode">◀</button>' +
+      '<button class="week-btn" onclick="gaNaarKalenderPeriode(state.kalenderOffset - state.weeksToShow)" title="Vorige periode">◀</button>' +
       '<button class="week-btn" style="min-width:130px;font-weight:600" onclick="openMaandPicker()">' + navLabel + ' ▾</button>' +
-      (state.kalenderOffset !== 0 ? '<button class="week-btn" onclick="state.kalenderOffset=0;render()" title="Naar vandaag">↩ Nu</button>' : '') +
-      '<button class="week-btn" onclick="state.kalenderOffset+=state.weeksToShow;render()" title="Volgende periode">▶</button>' +
+      (state.kalenderOffset !== 0 ? '<button class="week-btn" onclick="gaNaarKalenderPeriode(0)" title="Naar vandaag">↩ Nu</button>' : '') +
+      '<button class="week-btn" onclick="gaNaarKalenderPeriode(state.kalenderOffset + state.weeksToShow)" title="Volgende periode">▶</button>' +
       '<span class="filter-label" style="margin-left:6px">Weken:</span>' +
-      [3,4,6,8,12].map(function(w) { return '<button class="week-btn ' + (state.weeksToShow === w ? 'active' : '') + '" onclick="state.weeksToShow=' + w + '; render();">' + w + '</button>'; }).join('') +
+      [3,4,6,8,12].map(function(w) { return '<button class="week-btn ' + (state.weeksToShow === w ? 'active' : '') + '" onclick="gaNaarKalenderPeriode(state.kalenderOffset, ' + w + ')">' + w + '</button>'; }).join('') +
       '</div>';
   }
   app.innerHTML = '<header class="header"><div class="header-inner"><div class="header-left">' +
@@ -1195,7 +1192,7 @@ function openMaandPicker() {
       var diffWeken = Math.round(diffMs / (7 * 24 * 3600 * 1000));
       var isHuidig = (jaar === today.getFullYear() && mi === today.getMonth());
       html += '<button class="btn-sm' + (isHuidig ? ' active' : '') + '" style="' + (isHuidig ? 'font-weight:700;' : '') + '" ' +
-        'onclick="state.kalenderOffset=' + diffWeken + ';closeModal();render()">' + naam + '</button>';
+        'onclick="closeModal();gaNaarKalenderPeriode(' + diffWeken + ')">' + naam + '</button>';
     });
     html += '</div></div>';
   });
@@ -1621,8 +1618,28 @@ async function saveSettingsModal() {
 }
 
 // Reload helpers
+// De maandag waarop het zichtbare kalendervenster begint. Gedeeld met
+// renderCalendar, zodat het ophalen van afspraken en dagaanpassingen niet uit
+// de pas kan lopen met wat er getekend wordt. Daar zat de fout: er werd altijd
+// vanaf deze week opgehaald, ook als je maanden terugbladerde -- afspraken en
+// verlof uit het verleden kwamen daardoor nooit in beeld.
+function zichtbareStartMaandag() {
+  var base = new Date(); base.setDate(base.getDate() + state.kalenderOffset * 7);
+  return getMondayOfWeek(toDateStr(base));
+}
+
+// Verschuift het kalendervenster en haalt de data voor de nieuwe periode op.
+// Alle knoppen die de kalender verplaatsen lopen hierlangs.
+async function gaNaarKalenderPeriode(offset, weken) {
+  state.kalenderOffset = offset;
+  if (weken) state.weeksToShow = weken;
+  render();
+  await reloadDagOverrides();
+  render();
+}
+
 async function reloadDagOverrides() {
-  var startMonday = getMondayOfWeek(todayStr());
+  var startMonday = zichtbareStartMaandag();
   var endDate = new Date(startMonday); endDate.setDate(endDate.getDate() + state.weeksToShow * 7);
   var endDateStr = toDateStr(endDate);
   var results = await Promise.all([fetchDagOverrides(startMonday, endDateStr), fetchAfspraken(startMonday, endDateStr)]);
