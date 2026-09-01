@@ -17,6 +17,9 @@ self.addEventListener('install', function(e) {
 self.addEventListener('activate', function(e) { e.waitUntil(clients.claim()); });
 
 self.addEventListener('fetch', function(e) {
+  // Alleen GET: caches.put() weigert een POST of DELETE en dat gooit een
+  // onafgevangen fout op. Andere methodes gaan gewoon rechtstreeks.
+  if (e.request.method !== 'GET') return;
   // Supabase API calls altijd live ophalen
   if (e.request.url.includes('supabase.co')) return;
   e.respondWith(
@@ -24,7 +27,11 @@ self.addEventListener('fetch', function(e) {
       return fetch(e.request).then(function(response) {
         if (response && response.status === 200) {
           var clone = response.clone();
-          caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+          // Alleen wat echt uit onze eigen map komt bewaren; een CDN-antwoord
+          // of een ondertekende foto-URL hoort hier niet in de cache.
+          if (response.type === 'basic') {
+            caches.open(CACHE).then(function(c) { c.put(e.request, clone); }).catch(function() {});
+          }
         }
         return response;
       }).catch(function() { return cached; });

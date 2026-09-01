@@ -78,7 +78,7 @@ async function saveKlus(klus) {
 
 async function deleteKlus(id) { const { error } = await db.from('klussen').delete().eq('id', id); if (error) meldDbFout('Keuring verwijderen', error); return !error; }
 async function archiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: true }).eq('id', id); if (error) meldDbFout('Archiveren', error); return !error; }
-async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'ingepland' }).eq('id', id); if (error) meldDbFout('Terugzetten uit archief', error); return !error; }
+async function deArchiveerKlus(id) { const { error } = await db.from('klussen').update({ gearchiveerd: false, status: 'ingepland', gestart_op: null, gekeurd_op: null }).eq('id', id); if (error) meldDbFout('Terugzetten uit archief', error); return !error; }
 
 function mapKlusFromDB(row) {
   return {
@@ -290,7 +290,8 @@ async function fetchFotos(klusId) {
   if (error) { meldDbFout("Foto's ophalen", error); return []; }
   const paden = data.map(f => f.storage_path);
   if (paden.length === 0) return [];
-  const { data: urls } = await db.storage.from('fotos').createSignedUrls(paden, 3600);
+  const { data: urls, error: urlError } = await db.storage.from('fotos').createSignedUrls(paden, 3600);
+  if (urlError) meldDbFout("Fotolinks ophalen", urlError);
   const perPad = {};
   (urls || []).forEach(u => { if (u.path) perPad[u.path] = u.signedUrl; });
   return data.map(f => ({ ...f, url: perPad[f.storage_path] || '' }));

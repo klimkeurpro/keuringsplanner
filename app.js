@@ -55,7 +55,8 @@ let state = {
     dagOverrides: {},
   },
   activeTab: 'kalender', weeksToShow: 6, kalenderOffset: 0, archiefZoek: '', loading: true, ingelogd: false, gebruikerEmail: '',
-  vakantieOverrides: null, urenJaar: new Date().getFullYear(),
+  vakantieOverrides: null, jaarDagOverrides: null, urenJaar: new Date().getFullYear(),
+  herstelModus: false,
 };
 
 
@@ -208,7 +209,10 @@ function buildCalendar(jobs, days) {
     if (!isAfgerond(job) && !job.gearchiveerd) return;
     const entry = cal[job.gekeurdOp]; if (!entry) return;
     entry.items.push({ job, hours: job.geschatteUren, type: 'historie' });
-    entry.usedHours += job.geschatteUren;
+    // Een keuring op locatie kostte nooit werkplaatscapaciteit: capacityForDay
+    // telde de uren er juist bij op zolang hij liep. Zou de terugblik ze wel
+    // afboeken, dan sloeg die dag na afronden ineens om naar overboekt.
+    if (!job.opLocatie) entry.usedHours += job.geschatteUren;
   });
 
   // Daarna: keuringen waar iemand mee bezig is. Die krijgen voorrang en
@@ -607,6 +611,10 @@ function renderArchief() {
 function render() {
   var app = document.getElementById('app');
   if (state.loading) { app.innerHTML = '<div class="loading"><div class="spinner"></div><p>KeuringsPlanner laden...</p></div>'; return; }
+  // Na een herstelmail is er wel een sessie, maar hoort de gebruiker eerst een
+  // nieuw wachtwoord te zetten -- anders is "wachtwoord vergeten" een rondje
+  // waarna je alsnog het oude nodig hebt.
+  if (state.herstelModus) { renderNieuwWachtwoordScherm(); return; }
   if (!state.ingelogd) { renderLoginScherm(); return; }
   var showStats = state.activeTab === 'kalender' || state.activeTab === 'kanban';
   var tabContent = '';
@@ -694,6 +702,38 @@ async function doWachtwoordVergeten() {
   var res = await db.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
   if (res.error) { showToast('Versturen mislukt', 'error'); return; }
   showToast('Herstelmail verstuurd naar ' + email);
+}
+
+function renderNieuwWachtwoordScherm() {
+  document.getElementById('app').innerHTML = '<div class="password-screen"><div class="password-box">' +
+    '<h1>🔑 Nieuw wachtwoord</h1><p>Kies een nieuw wachtwoord voor dit account</p>' +
+    '<input type="password" class="input" id="nw-ww1" placeholder="Nieuw wachtwoord" autocomplete="new-password" style="margin-bottom:8px" onkeydown="if(event.key===\'Enter\') doNieuwWachtwoord()" />' +
+    '<input type="password" class="input" id="nw-ww2" placeholder="Nogmaals ter controle" autocomplete="new-password" onkeydown="if(event.key===\'Enter\') doNieuwWachtwoord()" />' +
+    '<button class="btn-primary full-width" id="nw-knop" onclick="doNieuwWachtwoord()" style="margin-top:10px">Wachtwoord opslaan</button>' +
+    '<div id="nw-fout" class="pw-error"></div>' +
+    '<button class="btn-link" onclick="doLogout()" style="margin-top:12px;background:none;border:none;color:#6B7280;font-size:13px;cursor:pointer;text-decoration:underline">Annuleren</button>' +
+    '</div></div>';
+  setTimeout(function() { var el = document.getElementById('nw-ww1'); if (el) el.focus(); }, 100);
+}
+
+async function doNieuwWachtwoord() {
+  var ww1 = (document.getElementById('nw-ww1') || {}).value || '';
+  var ww2 = (document.getElementById('nw-ww2') || {}).value || '';
+  var fout = document.getElementById('nw-fout');
+  var knop = document.getElementById('nw-knop');
+  if (ww1.length < 8) { if (fout) fout.textContent = 'Kies een wachtwoord van minstens 8 tekens'; return; }
+  if (ww1 !== ww2) { if (fout) fout.textContent = 'De twee wachtwoorden zijn niet gelijk'; return; }
+  if (knop) { knop.disabled = true; knop.textContent = 'Opslaan...'; }
+  var res = await db.auth.updateUser({ password: ww1 });
+  if (res.error) {
+    if (fout) fout.textContent = 'Opslaan mislukt: ' + (res.error.message || 'probeer het opnieuw');
+    if (knop) { knop.disabled = false; knop.textContent = 'Wachtwoord opslaan'; }
+    return;
+  }
+  state.herstelModus = false;
+  showToast('Wachtwoord gewijzigd ✓');
+  var huidige = await db.auth.getSession();
+  await verwerkSessie(huidige.data ? huidige.data.session : null);
 }
 
 function openHandleiding() {
@@ -811,8 +851,16 @@ function openHandleiding() {
 // Actions
 async function switchTab(tab) {
   state.activeTab = tab;
-  if (tab === 'uren' && state.vakantieOverrides === null) {
-    state.vakantieOverrides = await fetchVakantieOverrides(state.urenJaar);
+  if (tab === 'uren' && (state.vakantieOverrides === null || state.jaarDagOverrides === null)) {
+    // Het urenoverzicht rekent over een heel jaar, terwijl state.dagOverrides
+    // alleen het zichtbare kalendervenster bevat. Daarmee klopte de
+    // ADV-opbouw niet en veranderde hij zelfs door in de kalender te bladeren.
+    var jaarData = await Promise.all([
+      fetchVakantieOverrides(state.urenJaar),
+      fetchDagOverrides(state.urenJaar + '-01-01', state.urenJaar + '-12-31'),
+    ]);
+    state.vakantieOverrides = jaarData[0];
+    state.jaarDagOverrides = jaarData[1];
   }
   render();
 }
@@ -847,8 +895,16 @@ async function doArchiveerKlus(id) {
 async function doDeArchiveer(id) {
   if (await deArchiveerKlus(id)) {
     var job = state.archief.find(function(j) { return j.id === id; });
-    if (job) { job.gearchiveerd = false; job.status = 'ingepland'; state.archief = state.archief.filter(function(j) { return j.id !== id; }); state.jobs.push(job); }
-    render(); showToast('Keuring teruggezet naar Intake');
+    if (job) {
+      job.gearchiveerd = false; job.status = 'ingepland';
+      // Start- en keurdatum horen bij het afgeronde werk. Blijven ze staan,
+      // dan denkt de planner dat er al dagen aan gewerkt is en verdwijnt de
+      // keuring meteen weer uit de kalender.
+      job.gestartOp = ''; job.gekeurdOp = '';
+      state.archief = state.archief.filter(function(j) { return j.id !== id; });
+      state.jobs.push(job);
+    }
+    render(); showToast('Keuring teruggezet naar Ingepland');
   }
 }
 async function toggleTodo(id, klaar) {
@@ -1565,7 +1621,15 @@ function openSettingsModal() {
     ruimtes: state.settings.ruimtes.slice(), email: state.settings.email || '' };
   renderSettingsModal();
 }
-function exportIcal() {
+async function exportIcal() {
+  // Afspraken apart ophalen in plaats van state.afspraken te gebruiken: dat
+  // bevat alleen het zichtbare kalendervenster, waardoor de export afhing van
+  // waar je toevallig naartoe gebladerd had. Vast bereik: drie maanden terug
+  // tot een jaar vooruit.
+  var van = new Date(); van.setMonth(van.getMonth() - 3);
+  var tot = new Date(); tot.setFullYear(tot.getFullYear() + 1);
+  var afspraken = await fetchAfspraken(toDateStr(van), toDateStr(tot));
+
   function fmtDT(date, time) {
     var t = (time || '09:00').replace(':', '');
     return date.replace(/-/g, '') + 'T' + t + '00';
@@ -1577,7 +1641,7 @@ function exportIcal() {
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//KeuringsPlanner//NL',
     'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:KeuringsPlanner',
   ];
-  state.afspraken.forEach(function(ap) {
+  afspraken.forEach(function(ap) {
     var p = state.personeel.find(function(x) { return x.id === ap.persoon_id; });
     var titel = (p ? p.naam + ' - ' : '') + ap.titel;
     lines.push('BEGIN:VEVENT');
@@ -1654,7 +1718,7 @@ async function saveSettingsModal() {
   state.settings.ruimtes = window._settingsForm.ruimtes;
   state.settings.email = email;
   state.settings.dagOverrides = Object.assign({}, state.settings.dagOverrides || {}, { __email: email });
-  await saveInstellingen(state.settings);
+  if (!(await saveInstellingen(state.settings))) return;  // meldDbFout heeft de melding al getoond
   closeModal(); render(); showToast('Instellingen opgeslagen ✓');
 }
 
@@ -1681,9 +1745,16 @@ async function gaNaarKalenderPeriode(offset, weken) {
 
 async function reloadDagOverrides() {
   var startMonday = zichtbareStartMaandag();
+  // Ook altijd de afgelopen weken meenemen, ook als je vooruit bladert.
+  // resterendeUren() rekent met capacityForDay() van de dagen sinds de
+  // startdag; zijn die niet geladen, dan verandert het resterende aantal uren
+  // van een lopende keuring puur doordat je door de kalender bladert.
+  var terug = new Date(); terug.setDate(terug.getDate() - 28);
+  var vanaf = getMondayOfWeek(toDateStr(terug));
+  if (vanaf > startMonday) vanaf = startMonday;
   var endDate = new Date(startMonday); endDate.setDate(endDate.getDate() + state.weeksToShow * 7);
   var endDateStr = toDateStr(endDate);
-  var results = await Promise.all([fetchDagOverrides(startMonday, endDateStr), fetchAfspraken(startMonday, endDateStr)]);
+  var results = await Promise.all([fetchDagOverrides(vanaf, endDateStr), fetchAfspraken(vanaf, endDateStr)]);
   state.dagOverrides = results[0];
   state.afspraken = results[1];
 }
@@ -1928,7 +1999,7 @@ function berekenADVUren(persoonId, jaar) {
         if (rr && rr.actief) {
           // Niet opbouwen als afwezig (welke reden dan ook)
           var afwezig = state.afwezigheden.some(function(a) { return a.persoon_id === persoonId && ds >= a.van_datum && ds <= a.tot_datum; });
-          var dagOv = state.dagOverrides.find(function(o) { return o.persoon_id === persoonId && o.datum === ds; });
+          var dagOv = (state.jaarDagOverrides || state.dagOverrides).find(function(o) { return o.persoon_id === persoonId && o.datum === ds; });
           var aanwezig = !afwezig && !(dagOv && dagOv.aanwezig === false);
           if (aanwezig) {
             var dagUren = timeToHours(rr.eind) - timeToHours(rr.start);
@@ -1985,8 +2056,8 @@ function renderUrenOverzicht() {
   var html = '<div class="page-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
     '<h2 style="margin:0">🏖️ Uren & verlof ' + jaar + '</h2>' +
     '<div style="display:flex;gap:6px">' +
-    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar - 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">← ' + (jaar - 1) + '</button>' +
-    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar + 1) + ';state.vakantieOverrides=null;switchTab(\'uren\')">' + (jaar + 1) + ' →</button>' +
+    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar - 1) + ';state.vakantieOverrides=null;state.jaarDagOverrides=null;switchTab(\'uren\')">← ' + (jaar - 1) + '</button>' +
+    '<button class="btn-sm" onclick="state.urenJaar=' + (jaar + 1) + ';state.vakantieOverrides=null;state.jaarDagOverrides=null;switchTab(\'uren\')">' + (jaar + 1) + ' →</button>' +
     '</div></div>';
   if (state.personeel.length === 0) return html + '<div class="empty-hint">Geen personeel geconfigureerd.</div></div>';
   if (state.vakantieOverrides === null) return html + '<div class="empty-hint">Laden...</div></div>';
@@ -2069,7 +2140,20 @@ async function initApp() {
   // wachten, waardoor de app op "Laden..." blijft hangen. Vandaar het werk
   // uitstellen tot buiten de callback-tick.
   db.auth.onAuthStateChange(function(event, session) {
-    setTimeout(function() { verwerkSessie(session); }, 0);
+    setTimeout(function() {
+      if (event === 'PASSWORD_RECOVERY') {
+        // De link uit de herstelmail levert een geldige sessie op. Eerst een
+        // nieuw wachtwoord laten kiezen, daarna pas de app.
+        state.herstelModus = true;
+        // Tokens uit de adresbalk halen, zodat verversen dit niet herhaalt.
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+        render();
+        return;
+      }
+      verwerkSessie(session);
+    }, 0);
   });
 
   var huidige = await db.auth.getSession();
@@ -2086,6 +2170,7 @@ async function verwerkSessie(session) {
     // niet aan #app, dus render() ruimt het niet op -- na uitloggen vanuit
     // Instellingen bleef het scherm anders over het inlogscherm heen staan.
     closeModal();
+    state.herstelModus = false;
     _dataGeladen = false;
     state.ingelogd = false; state.gebruikerEmail = '';
     state.jobs = []; state.archief = []; state.todos = [];

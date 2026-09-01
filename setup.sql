@@ -249,6 +249,12 @@ DROP POLICY IF EXISTS "Iedereen mag fotos uploaden"   ON storage.objects;
 DROP POLICY IF EXISTS "Iedereen mag fotos bekijken"   ON storage.objects;
 DROP POLICY IF EXISTS "Iedereen mag fotos verwijderen" ON storage.objects;
 
+-- Ook de nieuwe namen eerst weghalen, anders breekt een tweede uitvoering hier
+-- af en rolt de rest van dit blok terug.
+DROP POLICY IF EXISTS "Ingelogd mag fotos uploaden"    ON storage.objects;
+DROP POLICY IF EXISTS "Ingelogd mag fotos bekijken"    ON storage.objects;
+DROP POLICY IF EXISTS "Ingelogd mag fotos verwijderen" ON storage.objects;
+
 CREATE POLICY "Ingelogd mag fotos uploaden" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (bucket_id = 'fotos');
 CREATE POLICY "Ingelogd mag fotos bekijken" ON storage.objects
