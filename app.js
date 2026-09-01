@@ -716,9 +716,22 @@ function openHandleiding() {
     p('Zodra de keuring binnenkomt: open de keuring en vul de werkelijke aantallen in via het groene kader. Dit is zichtbaar bij volgende afspraken van dezelfde klant.') +
 
     s('📋 Kanban bord') +
+    p('Drie stappen: <strong>Ingepland → In behandeling → Klaar</strong>.') +
     li([
-      '<strong>Intake → In behandeling → Klaar → Afgeleverd</strong>',
+      '<strong>Ingepland</strong> — de afspraak staat. Het oranje badge <strong>"Verwacht 2 sep"</strong> betekent dat de set nog moet binnenkomen; is die datum geweest, dan zie je de afleverdatum.',
+      '<strong>In behandeling</strong> — zet je hierop zodra je eraan begint. Dit doet meer dan een kaartje verschuiven: zie hieronder.',
+      '<strong>Klaar</strong> — gekeurd. De knop <strong>📦 Retour</strong> zet de keuring meteen in het archief. Dat dekt opgehaald, opgestuurd én ter plekke teruggegeven bij een keuring op locatie.',
+      'Een 🚗 op de kaart betekent dat de keuring op locatie bij de klant is.',
       'Keuringen mét afleverdatum staan bovenaan (vroegste eerst). Zonder datum: op volgorde van binnenkomst.',
+    ]) +
+
+    s('🔧 Wat "In behandeling" doet met de planning') +
+    p('Zodra je een keuring op In behandeling zet, legt de app stil de startdag vast en trekt daarna elke werkdag de dagcapaciteit van de schatting af.') +
+    li([
+      'Een set van 24 uur bij 8 uur per dag bezet dag 1 nog drie dagen, dag 2 nog twee, dag 3 nog één.',
+      'Daardoor duwt een grote set de rest van de planning niet meer elke dag vooruit om op de laatste dag ineens terug te springen.',
+      'Je hoeft niets in te vullen. Vergis je je, sleep de kaart dan terug naar Ingepland — dan vervalt de startdag en staat de volle schatting er weer.',
+      'Duurt het langer dan geschat, dan verdwijnt de keuring uit de kalender terwijl hij op het bord blijft staan. Zet hem dan op Klaar of verhoog de geschatte uren.',
     ]) +
 
     s('📅 Kalender') +
@@ -727,6 +740,18 @@ function openHandleiding() {
       'Personeelsbalken eronder tonen wie er die dag is. Klik op een naam om een <strong>losse afspraak</strong> in te plannen (bijv. NKB, leverancier, overleg).',
       'Klik op de dag zelf om tijden aan te passen, iemand vrij te zetten, of iemand <strong>extra toe te voegen</strong> voor die dag.',
       'Losse afspraken buiten normale werktijden? De balk rekt automatisch mee.',
+      'Een <strong>doorzichtig grijs blok met ✔</strong> is werk dat al gekeurd is — dat is de terugblik, geen planning.',
+      'Een <strong>rood blok met ⚠</strong> betekent dat de afleverdatum verstreken is.',
+      'Blader je met ◀ terug, dan haalt de app ook de afspraken en afwezigheid van die periode op. Het duurt daardoor even voor het beeld compleet is.',
+    ]) +
+
+    s('📁 Archief — wie heb ik wanneer gekeurd?') +
+    li([
+      'De knop <strong>📦 Retour</strong> op een Klaar-kaart zet de keuring hierheen.',
+      'Nieuwste keuring bovenaan, met <strong>🔍 Gekeurd</strong> en de datum waarop je het werk hebt afgerond.',
+      'Zoeken kan op klantnaam, klantnummer of omschrijving.',
+      'Per ongeluk gearchiveerd? <strong>📤 Terugzetten</strong> brengt hem terug naar Ingepland.',
+      'Keuringen van vóór september 2026 hebben geen keurdatum — die werd toen nog niet vastgelegd. Ze staan er wel gewoon in.',
     ]) +
 
     s('📆 Losse afspraken plannen') +
@@ -754,10 +779,27 @@ function openHandleiding() {
 
     s('⚙️ Instellingen') +
     li([
-      'Inloggen gaat via een e-mailadres en wachtwoord. Vergeten? Klik "Wachtwoord vergeten?" op het inlogscherm, dan krijg je een herstelmail.',
       'Voeg set-types of ruimtes toe die bij jullie situatie passen.',
       '<strong>iCal export</strong>: download een .ics bestand met alle afspraken en keuringen, importeerbaar in Google Agenda, Outlook of Apple Agenda.',
     ]) +
+
+    s('🔐 Inloggen') +
+    li([
+      'Inloggen gaat met e-mailadres en wachtwoord. Elk apparaat logt één keer in; daarna blijf je ingelogd.',
+      'Uitloggen en zien onder welk account je werkt: <strong>⚙️ Instellingen</strong>, onderaan.',
+      'Wachtwoord vergeten? Vul je e-mailadres in op het inlogscherm en klik <strong>"Wachtwoord vergeten?"</strong> — je krijgt een herstelmail.',
+    ]) +
+
+    s('⚠️ Als er iets niet opgeslagen wordt') +
+    p('Elke mislukte actie geeft nu een rode melding. Bij een statuswijziging springt de kaart ook terug naar zijn oude kolom, zodat het bord nooit iets toont wat niet is opgeslagen.') +
+    li([
+      '<strong>"Je sessie is verlopen"</strong> — log opnieuw in en doe de actie nog een keer.',
+      '<strong>"Geen internet"</strong> — de app heeft verbinding nodig om op te slaan.',
+      'Zie je na een update een leeg scherm of een oude versie, druk dan <strong>Ctrl+Shift+R</strong>. De app bewaart bestanden lokaal en die kunnen verouderd zijn.',
+    ]) +
+
+    s('🇳🇱 Feestdagen') +
+    p('Officiële feestdagen staan onderaan het tabblad <strong>🏖️ Uren</strong> en tellen niet mee als werkdag. <strong>Bevrijdingsdag (5 mei) is hier alleen vrij in een lustrumjaar</strong> — 2030, 2035, 2040. In de andere jaren staat hij grijs in de lijst met "(geen vrije dag)" en telt hij als gewone werkdag mee in de capaciteit.') +
 
     s('📱 App installeren') +
     p('Telefoon: open in browser → tik <strong>Delen → Zet op beginscherm</strong>. Computer (Chrome): klik het installeer-icoon rechts in de adresbalk.') +
