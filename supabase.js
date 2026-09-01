@@ -70,6 +70,7 @@ function mapKlusFromDB(row) {
     persoonId: row.persoon_id || null,
     opLocatie: row.op_locatie || false,
     gestartOp: row.gestart_op || '',
+    gekeurdOp: row.gekeurd_op || '',
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -92,6 +93,7 @@ function mapKlusToDB(klus) {
     persoon_id: klus.persoonId || null,
     op_locatie: !!klus.opLocatie,
     gestart_op: klus.gestartOp || null,
+    gekeurd_op: klus.gekeurdOp || null,
   };
 }
 

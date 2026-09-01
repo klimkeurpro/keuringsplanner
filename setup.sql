@@ -206,3 +206,8 @@ ALTER TABLE klussen ADD CONSTRAINT klussen_status_check
 -- nog te gaan is, zodat een grote set niet elke dag de hele planning vooruit
 -- duwt om op de laatste dag ineens terug te springen.
 ALTER TABLE klussen ADD COLUMN IF NOT EXISTS gestart_op DATE DEFAULT NULL;
+
+-- Keurdatum: wanneer de keuring daadwerkelijk is afgerond. Wordt gezet zodra
+-- een kaart op Klaar komt. Hiermee is het archief een logboek en kan de
+-- kalender terugblikken op wat er wanneer gekeurd is.
+ALTER TABLE klussen ADD COLUMN IF NOT EXISTS gekeurd_op DATE DEFAULT NULL;

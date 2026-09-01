@@ -14,6 +14,22 @@ const STATUS_COLORS = { ingepland: '#D97706', in_behandeling: '#7C3AED', klaar: 
 // op vijf plekken los uitgeschreven; daardoor liep het uit de pas zodra de
 // statussen wijzigden.
 function isAfgerond(job) { return job.status === 'klaar'; }
+
+// De twee datums die bij een status horen. Staat op een gedeelde plek omdat de
+// status op twee manieren wijzigt: via de knoppen op de kanban en via de
+// keuzelijst in het keuringsformulier.
+function pasStatusDatumsAan(job) {
+  if (job.status === 'in_behandeling') { if (!job.gestartOp) job.gestartOp = todayStr(); }
+  else if (job.status === 'ingepland') { job.gestartOp = ''; }
+  if (job.status === 'klaar') {
+    // Niet stempelen op wat al gearchiveerd is: dan zou het openen en opslaan
+    // van een oude keuring er vandaag als keurdatum op zetten.
+    if (!job.gekeurdOp && !job.gearchiveerd) job.gekeurdOp = todayStr();
+  } else {
+    job.gekeurdOp = '';
+  }
+  return job;
+}
 const DAY_NAMES = ['ma', 'di', 'wo', 'do', 'vr'];
 const DAY_NAMES_FULL = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag'];
 const WARNING_DAYS = 8;
@@ -188,7 +204,20 @@ function buildCalendar(jobs, days) {
   const futureDays = days.filter(d => d >= today);
   const activeJobs = jobs.filter(j => !j.gearchiveerd && !isAfgerond(j));
 
-  // Eerste ronde: keuringen waar iemand mee bezig is. Die krijgen voorrang en
+  // Terugblik: wat er al gekeurd is, op de dag waarop het gekeurd is. Dit gaat
+  // eerst, want die uren zijn echt besteed en dus niet meer beschikbaar. Zonder
+  // deze telling zou een dag waarop je vijf uur gekeurd hebt alsnog als volledig
+  // vrij gelden, en zou het afronden van een keuring de capaciteit van vandaag
+  // opnieuw vrijgeven.
+  jobs.forEach(job => {
+    if (!job.gekeurdOp) return;
+    if (!isAfgerond(job) && !job.gearchiveerd) return;
+    const entry = cal[job.gekeurdOp]; if (!entry) return;
+    entry.items.push({ job, hours: job.geschatteUren, type: 'historie' });
+    entry.usedHours += job.geschatteUren;
+  });
+
+  // Daarna: keuringen waar iemand mee bezig is. Die krijgen voorrang en
   // een aflopende teller, zodat een grote set niet elke dag opnieuw met zijn
   // volle uren vooraan gaat staan en de rest vooruit duwt.
   const bezigJobs = activeJobs.filter(j => j.status === 'in_behandeling');
@@ -299,7 +328,10 @@ function renderCalendar() {
   var base = new Date(); base.setDate(base.getDate() + state.kalenderOffset * 7);
   var startMonday = getMondayOfWeek(toDateStr(base));
   var allDays = getWorkdays(startMonday, state.weeksToShow);
-  var calendar = buildCalendar(state.jobs, allDays);
+  // Archief meegeven voor de terugblik: gekeurde keuringen zijn gearchiveerd
+  // en zitten dus niet in state.jobs. De planning zelf raakt dit niet -- die
+  // filtert gearchiveerde en afgeronde keuringen weg.
+  var calendar = buildCalendar(state.jobs.concat(state.archief), allDays);
   var today = todayStr();
   var weeks = [];
   for (var i = 0; i < allDays.length; i += 5) weeks.push(allDays.slice(i, i + 5));
@@ -309,6 +341,7 @@ function renderCalendar() {
     '<span class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span> Keuring (met datum)</span>' +
     '<span class="legend-item"><span class="legend-dot muted-bg"></span> Wachtlijst</span>' +
     '<span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Vrij</span>' +
+    '<span class="legend-item"><span class="legend-dot" style="background:var(--text-faint);opacity:0.55"></span> Al gekeurd</span>' +
     '<span class="legend-sep">|</span><span class="legend-hint">Klik op naam in balk → afspraak plannen</span></div>';
 
   html += '<div class="cal-grid-outer">';
@@ -351,12 +384,20 @@ function renderCalendar() {
       // Alleen keuringen in de pil; afspraken verminderen al de capaciteit via capacityForDay()
       var aItems = entry.items.filter(function(it) { return it.type === 'afspraak'; });
       var tItems = entry.items.filter(function(it) { return it.type === 'tussendoor'; });
+      var hItems = entry.items.filter(function(it) { return it.type === 'historie'; });
       var freeH = Math.max(0, entry.capacity - entry.usedHours);
 
       html += '<div class="cal-cap-section" onclick="event.stopPropagation()">';
       html += '<div class="cap-bar-new">';
 
       if (entry.capacity > 0) {
+        // Terugblik: al gekeurd op deze dag. Doorzichtig, zodat het duidelijk
+        // verschilt van werk dat nog moet gebeuren.
+        hItems.forEach(function(item) {
+          var pct = Math.min((item.hours / entry.capacity) * 100, 100);
+          if (pct < 0.5) return;
+          html += '<div class="cap-seg cap-seg-historie" style="width:' + pct.toFixed(1) + '%" title="Gekeurd op ' + formatDateShort(item.job.gekeurdOp) + ': ' + escHtml(item.job.klant) + ' · ' + r2(item.hours) + 'u' + (item.job.opLocatie ? ' · 🚗 op locatie' : '') + '" onclick="openJobModal(' + item.job.id + ',' + (item.job.gearchiveerd ? 'true' : 'false') + ')">✔ ' + (item.job.opLocatie ? '🚗 ' : '') + escHtml(item.job.klant) + '</div>';
+        });
         // Blauwe segmenten: keuringen met afsprakendatum
         aItems.forEach(function(item) {
           var pct = Math.min((item.hours / entry.capacity) * 100, 100);
@@ -548,6 +589,12 @@ function renderTodo() {
 function renderArchief() {
   var z = state.archiefZoek.toLowerCase();
   var results = state.archief.filter(function(k) { return !z || k.klant.toLowerCase().indexOf(z) >= 0 || (k.klantNummer || '').toLowerCase().indexOf(z) >= 0 || k.omschrijving.toLowerCase().indexOf(z) >= 0; });
+  // Nieuwste keuring bovenaan. Keuringen van voor de invoering van gekeurdOp
+  // hebben die datum niet; die vallen terug op de laatste wijziging, zodat ze
+  // niet allemaal onderaan belanden.
+  results = results.slice().sort(function(a, b) {
+    return (b.gekeurdOp || (b.updatedAt || '').slice(0, 10)).localeCompare(a.gekeurdOp || (a.updatedAt || '').slice(0, 10));
+  });
   var html = '<div class="archief-search"><input type="text" class="input" placeholder="Zoek op klantnaam, nummer of omschrijving..." value="' + escHtml(state.archiefZoek) + '" oninput="state.archiefZoek = this.value; render();" />' +
     '<span class="archief-count">' + results.length + ' keuring' + (results.length !== 1 ? 'en' : '') + ' in archief</span></div>';
   if (results.length === 0) html += '<div class="empty-state">Geen gearchiveerde keuringen' + (z ? ' gevonden' : '') + '</div>';
@@ -555,6 +602,7 @@ function renderArchief() {
     html += '<div class="archief-card" onclick="openJobModal(' + job.id + ', true)"><div class="archief-card-left">' +
       '<div class="archief-card-name">' + escHtml(job.klant) + '</div><div class="archief-card-desc">' + escHtml(job.omschrijving) + '</div>' +
       '<div class="archief-card-meta">' + (job.klantNummer ? '<span>📋 ' + escHtml(job.klantNummer) + '</span>' : '') +
+      (job.gekeurdOp ? '<span class="accent">🔍 Gekeurd: ' + formatDateShort(job.gekeurdOp) + '</span>' : '') +
       '<span>📅 Binnen: ' + formatDateShort(job.datumBinnen) + '</span><span>⏱ ' + job.geschatteUren + 'u</span>' +
       (job.heeftAfspraak ? '<span class="accent">📅 Aflevering: ' + formatDateShort(job.afspraakDatum) + '</span>' : '<span>Wachtlijst</span>') +
       '</div></div><div class="archief-card-right"><button class="btn-sm" onclick="event.stopPropagation(); doDeArchiveer(' + job.id + ')">📤 Terugzetten</button></div></div>';
@@ -745,11 +793,7 @@ async function switchTab(tab) {
 async function changeJobStatus(id, newStatus) {
   var job = state.jobs.find(function(j) { return j.id === id; }); if (!job) return;
   job.status = newStatus;
-  // Startdag vastleggen zodra de keuring in behandeling gaat -- daarmee rekent
-  // de planner uit hoeveel uur er nog te gaan is. Terugslepen naar Ingepland
-  // wist de startdag weer, zodat de volle schatting terugkomt.
-  if (newStatus === 'in_behandeling') { if (!job.gestartOp) job.gestartOp = todayStr(); }
-  else if (newStatus === 'ingepland') { job.gestartOp = ''; }
+  pasStatusDatumsAan(job);
   render(); await saveKlus(job); showToast(job.klant + ' → ' + STATUS_LABELS[newStatus]);
 }
 async function doDeleteJob(id) {
@@ -1416,8 +1460,8 @@ async function doDeleteFoto(fotoId, storagePath, klusId) {
 
 function collectFormData() {
   syncFormToModal(); var form = window._modalForm;
-  return Object.assign({}, form, { heeftAfspraak: !!(form.retourDatum), afspraakDatum: form.retourDatum || '',
-    datumBinnen: form.binnenkomstDatum || form.datumBinnen || todayStr() });
+  return pasStatusDatumsAan(Object.assign({}, form, { heeftAfspraak: !!(form.retourDatum), afspraakDatum: form.retourDatum || '',
+    datumBinnen: form.binnenkomstDatum || form.datumBinnen || todayStr() }));
 }
 async function submitJobForm() {
   var data = collectFormData();
