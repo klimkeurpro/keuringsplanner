@@ -85,7 +85,7 @@ function mapKlusToDB(klus) {
     binnenkomst_wijze: klus.binnenkomstWijze || '', binnenkomst_datum: klus.binnenkomstDatum || null,
     binnenkomst_tijd: klus.binnenkomstTijd || '', retour_wijze: klus.retourWijze || '',
     retour_datum: klus.retourDatum || null, retour_tijd: klus.retourTijd || '',
-    datum_binnen: klus.datumBinnen || klus.binnenkomstDatum || new Date().toISOString().split('T')[0],
+    datum_binnen: klus.datumBinnen || klus.binnenkomstDatum || todayStr(),
     afkeur_beleid: klus.afkeurBeleid || '', afkeur_toelichting: klus.afkeurToelichting || '',
     contact_log: klus.contactLog || [], notities: klus.notities || '',
     gearchiveerd: klus.gearchiveerd || false,
@@ -117,7 +117,7 @@ async function saveTodo(todo) {
     const { data, error } = await db.from('todos').insert({
       tekst: todo.tekst, ruimte: todo.ruimte || '', persoon: todo.persoon || '',
       prioriteit: todo.prioriteit || 'normaal', klaar: false,
-      datum: todo.datum || new Date().toISOString().split('T')[0],
+      datum: todo.datum || todayStr(),
     }).select().single();
     if (error) { console.error('Fout bij aanmaken todo:', error); return null; }
     return data;
