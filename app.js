@@ -60,7 +60,11 @@ let state = {
 
 
 // Date helpers
-const toDateStr = (d) => d.toISOString().split('T')[0];
+// Op lokale datum, niet via toISOString(): die rekent naar UTC, en omdat
+// Nederland voorloopt werd middernacht de dag ervoor. new Date(2026,0,1) gaf
+// zo '2025-12-31'. Alle feestdagen stonden daardoor een dag te vroeg, en
+// todayStr() klopte tussen middernacht en 02:00 niet.
+const toDateStr = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const parseDate = (s) => new Date(s + 'T00:00:00');
 const todayStr = () => toDateStr(new Date());
 const nowTimeStr = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
@@ -1749,29 +1753,34 @@ function easterDate(year) {
   var day = ((h + l - 7 * m + 114) % 31) + 1;
   return new Date(year, month - 1, day);
 }
-function getNLFeestdagen(jaar) {
-  var feestdagen = [];
-  var addDate = function(d) { feestdagen.push(toDateStr(d)); };
-  // Vaste feestdagen
-  addDate(new Date(jaar, 0, 1));   // Nieuwjaarsdag
-  addDate(new Date(jaar, 11, 25)); // 1e Kerstdag
-  addDate(new Date(jaar, 11, 26)); // 2e Kerstdag
-  // Koningsdag: 27 april, maar als dat zondag is dan 26 april
+// Alle Nederlandse feestdagen van een jaar, met hun naam. Eén bron: het
+// overzicht onderaan bouwde dezelfde lijst nog een keer op, met eigen
+// datumberekeningen en handgeschreven sleutels als jaar + '-01-01'. Zodra die
+// twee uit elkaar liepen toonde het overzicht een kale datum in plaats van de
+// naam -- precies wat er gebeurde.
+function getNLFeestdagenMetNaam(jaar) {
+  var pasen = easterDate(jaar);
+  var paasPlus = function(n) { var r = new Date(pasen); r.setDate(r.getDate() + n); return r; };
+  // Koningsdag is 27 april, maar valt die op zondag dan wordt het 26 april.
   var kd = new Date(jaar, 3, 27);
   if (kd.getDay() === 0) kd = new Date(jaar, 3, 26);
-  addDate(kd);
-  // Bevrijdingsdag 5 mei (elk jaar)
-  addDate(new Date(jaar, 4, 5));
-  // Paas-gerelateerde feestdagen
-  var pasen = easterDate(jaar);
-  var addDays = function(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; };
-  addDate(addDays(pasen, -2)); // Goede Vrijdag
-  addDate(pasen);              // 1e Paasdag
-  addDate(addDays(pasen, 1));  // 2e Paasdag
-  addDate(addDays(pasen, 39)); // Hemelvaartsdag
-  addDate(addDays(pasen, 49)); // 1e Pinksterdag
-  addDate(addDays(pasen, 50)); // 2e Pinksterdag
-  return feestdagen;
+  return [
+    { d: new Date(jaar, 0, 1),   naam: 'Nieuwjaarsdag' },
+    { d: paasPlus(-2),           naam: 'Goede Vrijdag' },
+    { d: pasen,                  naam: '1e Paasdag' },
+    { d: paasPlus(1),            naam: '2e Paasdag' },
+    { d: kd,                     naam: 'Koningsdag' },
+    { d: new Date(jaar, 4, 5),   naam: 'Bevrijdingsdag' },
+    { d: paasPlus(39),           naam: 'Hemelvaartsdag' },
+    { d: paasPlus(49),           naam: '1e Pinksterdag' },
+    { d: paasPlus(50),           naam: '2e Pinksterdag' },
+    { d: new Date(jaar, 11, 25), naam: '1e Kerstdag' },
+    { d: new Date(jaar, 11, 26), naam: '2e Kerstdag' },
+  ].map(function(f) { return { datum: toDateStr(f.d), naam: f.naam }; })
+   .sort(function(a, b) { return a.datum.localeCompare(b.datum); });
+}
+function getNLFeestdagen(jaar) {
+  return getNLFeestdagenMetNaam(jaar).map(function(f) { return f.datum; });
 }
 function isFeestdag(dateStr, feestdagen) {
   return feestdagen.indexOf(dateStr) !== -1;
@@ -1972,33 +1981,15 @@ function renderUrenOverzicht() {
 
   // Feestdagen blok
   html += '<div class="card" style="margin-top:8px"><div style="font-weight:600;margin-bottom:10px">🇳🇱 Officiële feestdagen ' + jaar + '</div>';
-  var feestNamen = {};
-  var fd = feestdagen.slice().sort();
-  var pasen = easterDate(jaar);
-  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
-  var pStr = pasen.getFullYear() + '-' + pad(pasen.getMonth()+1) + '-' + pad(pasen.getDate());
-  var addDays2 = function(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return toDateStr(r); };
-  feestNamen[jaar + '-01-01'] = 'Nieuwjaarsdag';
-  feestNamen[addDays2(pasen, -2)] = 'Goede Vrijdag';
-  feestNamen[pStr] = '1e Paasdag';
-  feestNamen[addDays2(pasen, 1)] = '2e Paasdag';
-  var kdStr = (new Date(jaar, 3, 27)).getDay() === 0 ? jaar + '-04-26' : jaar + '-04-27';
-  feestNamen[kdStr] = 'Koningsdag';
-  feestNamen[jaar + '-05-05'] = 'Bevrijdingsdag';
-  feestNamen[addDays2(pasen, 39)] = 'Hemelvaartsdag';
-  feestNamen[addDays2(pasen, 49)] = '1e Pinksterdag';
-  feestNamen[addDays2(pasen, 50)] = '2e Pinksterdag';
-  feestNamen[jaar + '-12-25'] = '1e Kerstdag';
-  feestNamen[jaar + '-12-26'] = '2e Kerstdag';
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px">';
-  fd.forEach(function(ds) {
-    var d = parseDate(ds);
+  getNLFeestdagenMetNaam(jaar).forEach(function(f) {
+    var d = parseDate(f.datum);
     var dagNaam = DAG_NL[d.getDay()];
     var label = d.getDate() + ' ' + maandNL[d.getMonth()] + ' (' + dagNaam + ')';
     var isWerkdag = d.getDay() >= 1 && d.getDay() <= 5;
     html += '<div style="font-size:12px;padding:3px 0;display:flex;gap:6px">' +
       '<span style="color:#6B7280;min-width:80px">' + label + '</span>' +
-      '<span>' + (feestNamen[ds] || ds) + '</span>' +
+      '<span>' + f.naam + '</span>' +
       (!isWerkdag ? '<span style="color:#9CA3AF;font-size:10px">(weekend)</span>' : '') +
       '</div>';
   });
