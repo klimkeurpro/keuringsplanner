@@ -268,3 +268,8 @@ UPDATE instellingen SET dag_overrides = dag_overrides - '__wachtwoord' WHERE id 
 -- Controle: hier hoort niets meer te staan met roles = {public} of {anon}.
 SELECT tablename, policyname, roles FROM pg_policies
 WHERE schemaname = 'public' ORDER BY tablename;
+
+-- Zoekpad van de timestamp-trigger vastzetten. Zonder expliciet search_path
+-- kan een functie in theorie een tabel of functie uit een ander schema
+-- oppikken. Gemeld door de Security Advisor van Supabase.
+ALTER FUNCTION public.update_updated_at() SET search_path = public, pg_temp;
