@@ -1354,6 +1354,7 @@ function syncFormToModal() {
   if (el('jf-ret-tijd')) form.retourTijd = el('jf-ret-tijd').value;
   if (el('jf-afkeur-toel')) form.afkeurToelichting = el('jf-afkeur-toel').value;
   if (el('jf-status')) form.status = el('jf-status').value;
+  if (el('jf-gekeurd')) form.gekeurdOp = el('jf-gekeurd').value;
   if (el('jf-notities')) form.notities = el('jf-notities').value;
   if (el('jf-persoon')) form.persoonId = el('jf-persoon').value ? parseInt(el('jf-persoon').value) : null;
   if (el('jf-op-locatie')) form.opLocatie = el('jf-op-locatie').checked;
@@ -1464,7 +1465,17 @@ function renderJobModalContent(skipSync) {
       : '') +
     '</div>';
   if (!isNew) {
-    html += '<div class="form-section"><div class="field"><label>Status</label><select class="input" id="jf-status">' + statusHtml + '</select></div></div>' +
+    html += '<div class="form-section"><div class="field"><label>Status</label>' +
+      '<select class="input" id="jf-status" onchange="syncFormToModal();renderJobModalContent(true)">' + statusHtml + '</select></div>' +
+      // Alleen bij Klaar: hier corrigeer je de dag waarop je het werk echt
+      // gedaan hebt. Zonder dit veld kreeg een keuring die je later afmeldt
+      // altijd de datum van vandaag, en klopte de terugblik niet.
+      (form.status === 'klaar'
+        ? '<div class="field" style="margin-top:8px"><label>🔍 Gekeurd op</label>' +
+          '<input type="date" class="input" id="jf-gekeurd" value="' + (form.gekeurdOp || '') + '" />' +
+          '<div class="hint-text" style="margin-top:4px">Bepaalt op welke dag de keuring in de terugblik en het archief staat. Standaard vandaag; pas hem aan als je later afmeldt.</div></div>'
+        : '') +
+      '</div>' +
       '<div class="form-section"><div class="section-title-row"><span class="section-title">📞 Klantcontact</span>' +
       '<button class="btn-sm btn-accent" onclick="addContactEntry()">+ Moment toevoegen</button></div>' +
       '<div id="contact-add-area"></div><div id="contact-log-list">' + contactHtml +
