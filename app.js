@@ -15,6 +15,21 @@ const STATUS_COLORS = { ingepland: '#D97706', in_behandeling: '#7C3AED', klaar: 
 // statussen wijzigden.
 function isAfgerond(job) { return job.status === 'klaar'; }
 
+// Feestdagen per jaar, één keer uitgerekend: capacityForDay draait voor elke
+// dag in beeld en Pasen opnieuw uitrekenen per cel is zonde.
+var _feestdagenPerJaar = {};
+function feestdagenVanJaar(jaar) {
+  if (!_feestdagenPerJaar[jaar]) {
+    _feestdagenPerJaar[jaar] = getNLFeestdagenMetNaam(jaar).filter(function(f) { return f.vrij; });
+  }
+  return _feestdagenPerJaar[jaar];
+}
+function feestdagNaam(dateStr) {
+  var lijst = feestdagenVanJaar(parseInt(dateStr.substring(0, 4), 10));
+  for (var i = 0; i < lijst.length; i++) if (lijst[i].datum === dateStr) return lijst[i].naam;
+  return '';
+}
+
 // De twee datums die bij een status horen. Staat op een gedeelde plek omdat de
 // status op twee manieren wijzigt: via de knoppen op de kanban en via de
 // keuzelijst in het keuringsformulier.
@@ -154,6 +169,13 @@ function capacityForDay(dateStr) {
   const capOv = getCapOverrideForDay(dateStr);
   if (capOv && capOv.capaciteit_override != null) {
     base = capOv.capaciteit_override;
+  } else if (feestdagNaam(dateStr)) {
+    // Officiële feestdag: geen keurcapaciteit. De feestdagenlijst werd tot nu
+    // toe alleen in het urenoverzicht gebruikt, niet in de planning -- daardoor
+    // stond er op eerste kerstdag en nieuwjaarsdag gewoon een volle dag.
+    // Een handmatige capaciteitsaanpassing hierboven gaat hier wél voor: dan
+    // heb je bewust gezegd dat er die dag toch gewerkt wordt.
+    base = 0;
   } else if (state.personeel.length === 0) {
     const dk = dayKey(dateStr);
     base = dk ? (state.settings.template[dk] || 0) : 0;
@@ -370,6 +392,8 @@ function renderCalendar() {
       html += '<span class="day-month">' + date.toLocaleDateString('nl-NL', { month: 'short' }) + '</span>';
       html += '</div><div class="cal-day-badges">';
       if (isToday) html += '<span class="badge badge-today">NU</span>';
+      var fdNaam = feestdagNaam(dateStr);
+      if (fdNaam) html += '<span class="badge" style="background:#FEE2E2;color:#991B1B" title="' + escHtml(fdNaam) + '">' + escHtml(fdNaam) + '</span>';
       if (hasCapOverride) html += '<span class="badge badge-override">✎</span>';
       if (staffAbsent.length > 0) html += '<span class="badge badge-absent">' + staffAbsent.length + '×afw</span>';
       var mmdd = dateStr.substring(5); // MM-DD
@@ -854,7 +878,7 @@ function openHandleiding() {
     ]) +
 
     s('🇳🇱 Feestdagen') +
-    p('Officiële feestdagen staan onderaan het tabblad <strong>🏖️ Uren</strong> en tellen niet mee als werkdag. <strong>Bevrijdingsdag (5 mei) is hier alleen vrij in een lustrumjaar</strong> — 2030, 2035, 2040. In de andere jaren staat hij grijs in de lijst met "(geen vrije dag)" en telt hij als gewone werkdag mee in de capaciteit.') +
+    p('Officiële feestdagen staan onderaan het tabblad <strong>🏖️ Uren</strong> en tellen niet mee als werkdag. In de kalender krijgt die dag een rood label met de naam en staat de keurcapaciteit op nul. Moet er toch gewerkt worden, klik dan op die dag en zet de capaciteit met de hand — dat gaat voor de feestdag. <strong>Bevrijdingsdag (5 mei) is hier alleen vrij in een lustrumjaar</strong> — 2030, 2035, 2040. In de andere jaren staat hij grijs in de lijst met "(geen vrije dag)" en telt hij als gewone werkdag mee in de capaciteit.') +
 
     s('📱 App installeren') +
     p('Telefoon: open in browser → tik <strong>Delen → Zet op beginscherm</strong>. Computer (Chrome): klik het installeer-icoon rechts in de adresbalk.') +
