@@ -687,6 +687,21 @@ async function doLogin() {
   // Verder gaat via onAuthStateChange -- niet hier data ophalen.
 }
 
+async function doInlogadresWijzigen() {
+  var nieuw = ((document.getElementById('set-nieuw-login') || {}).value || '').trim();
+  if (!nieuw) { showToast('Vul eerst het nieuwe e-mailadres in', 'error'); return; }
+  if (nieuw.toLowerCase() === (state.gebruikerEmail || '').toLowerCase()) {
+    showToast('Dat is het huidige adres al', 'error'); return;
+  }
+  if (!confirm('Inlogadres wijzigen naar ' + nieuw + '?\n\nJe moet de link in de bevestigingsmail aanklikken. Komt die niet aan, dan blijft het huidige adres gewoon werken.')) return;
+  var res = await db.auth.updateUser({ email: nieuw });
+  if (res.error) {
+    showToast('Wijzigen mislukt: ' + (res.error.message || 'probeer het opnieuw'), 'error');
+    return;
+  }
+  showToast('Bevestigingsmail verstuurd naar ' + nieuw);
+}
+
 async function doLogout() {
   if (!confirm('Uitloggen?')) return;
   await db.auth.signOut();
@@ -1699,13 +1714,18 @@ function renderSettingsModal() {
     '<div class="field-row compact"><input class="input flex-1" id="set-new-room" placeholder="Ruimte..." /><button class="btn-step" onclick="addSettRoom()">+</button></div></div>' +
     '<div class="form-section"><div class="section-title">🔒 Beveiliging</div>' +
     '<div class="field"><label>E-mailadres beheerder</label>' +
-    '<input type="email" class="input" id="set-email" value="' + escHtml(f.email || '') + '" placeholder="info@bedrijf.nl" /></div>' +
+    '<input type="email" class="input" id="set-email" value="' + escHtml(f.email || '') + '" placeholder="info@bedrijf.nl" />' +
+    '<div class="hint-text" style="margin-top:4px">Alleen een notitie, bijvoorbeeld wie je moet bellen. Hiermee log je niet in.</div></div>' +
     '<div class="field"><label>Ingelogd als</label>' +
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
     '<span style="font-size:14px;color:#374151">' + escHtml(state.gebruikerEmail || '—') + '</span>' +
     '<button class="btn-sm" onclick="doLogout()">Uitloggen</button></div>' +
-    '<div class="hint-text" style="margin-top:4px">Het wachtwoord beheer je in Supabase, niet meer hier. Vergeten? Gebruik "Wachtwoord vergeten?" op het inlogscherm.</div>' +
-    '</div></div></div>' +
+    '<div class="hint-text" style="margin-top:4px">Het wachtwoord beheer je in Supabase, niet meer hier. Vergeten? Gebruik "Wachtwoord vergeten?" op het inlogscherm.</div></div>' +
+    '<div class="field" style="margin-top:10px"><label>Inlogadres wijzigen</label>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap"><input type="email" class="input flex-1" id="set-nieuw-login" placeholder="nieuw@bedrijf.nl" autocomplete="off" />' +
+    '<button class="btn-sm btn-accent" onclick="doInlogadresWijzigen()">Wijzigen</button></div>' +
+    '<div class="hint-text" style="margin-top:4px">Er gaat een bevestigingslink naar het nieuwe adres, en meestal ook naar het huidige. Pas als beide bevestigd zijn, log je met het nieuwe adres in. Tot die tijd blijft het oude adres werken.</div></div>' +
+    '</div></div>' +
     '<div class="form-section"><div class="section-title">📅 Google Agenda / iCal</div>' +
     '<p style="font-size:12px;color:var(--text-faint);margin:0 0 8px">Download een .ics bestand met alle afspraken en keuringen. Importeer dit in Google Agenda, Outlook of Apple Agenda.</p>' +
     '<button class="btn-secondary full-width" onclick="exportIcal()">⬇ Download kalender (.ics)</button></div></div>' +
