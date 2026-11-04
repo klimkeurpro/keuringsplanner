@@ -285,7 +285,20 @@ function buildCalendar(jobs, days) {
       entry.usedHours += allocate; remaining -= allocate;
     }
     if (remaining > 0) {
-      const target = cal[deadline] || cal[futureDays[futureDays.length - 1]];
+      // "Past niet" alleen melden als de afleverdatum echt in beeld is. Ligt
+      // hij voorbij het venster, dan is er niets aan de hand: het werk loopt
+      // gewoon door buiten beeld en wordt verderop ingepland. Dit viel vroeger
+      // terug op de laatste zichtbare dag, waardoor keuringen van weken later
+      // daar als OVER op een hoop belandden (41 uur op een dag van 6).
+      let target = cal[deadline];
+      const laatsteDag = futureDays[futureDays.length - 1];
+      if (!target && laatsteDag && deadline <= laatsteDag) {
+        // Afleverdatum valt binnen het venster maar op een niet-werkdag:
+        // markeer de laatste werkdag ervoor.
+        for (let i = futureDays.length - 1; i >= 0; i--) {
+          if (futureDays[i] <= deadline) { target = cal[futureDays[i]]; break; }
+        }
+      }
       if (target) { target.items.push({ job, hours: remaining, type: 'afspraak', overflow: true }); target.usedHours += remaining; }
     }
   });
