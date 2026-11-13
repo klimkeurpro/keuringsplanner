@@ -471,7 +471,7 @@ function renderCalendar() {
         html += '<div class="staff-name-row">';
         staffPresent.forEach(function(s, si) {
           html += '<div class="staff-name-cell" style="width:' + barW + '%;left:' + (si * barW) + '%;border-color:' + s.kleur + '">' +
-            '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Afspraak plannen voor ' + escHtml(s.naam) + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">+ ' + escHtml(s.naam) + '</span>' +
+            '<span class="staff-bar-name" style="color:' + s.kleur + ';cursor:pointer" title="Afspraak plannen voor ' + escHtml(s.naam) + '" onclick="openAfspraakModal(' + s.id + ', \'' + dateStr + '\', null)">' + escHtml(s.naam) + '</span>' +
             (s.is_keurmeester ? '<span class="staff-bar-cap" style="color:' + s.kleur + ';cursor:pointer" title="Nieuwe keuring voor ' + escHtml(s.naam) + '" onclick="event.stopPropagation();openNieuweKeuringVanafKalender(\'' + dateStr + '\',' + s.id + ')">' + s.keuringsuren + 'u keur.</span>' : '') +
             '</div>';
         });
